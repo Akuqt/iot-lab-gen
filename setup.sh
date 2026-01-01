@@ -130,6 +130,11 @@ echo ""
 echo "[4/8] Writing Agent Scripts..."
 
 # --- Syslog Processor ---
+# Fix: Sanitize map string to prevent SyntaxError (ensure max 2 closing braces)
+if [[ "${PYTHON_MAP_STR: -3}" == "}}}" ]]; then
+    PYTHON_MAP_STR="${PYTHON_MAP_STR%?}"
+fi
+
 cat << EOF > src/dhcp_processor.py
 #!/usr/bin/env python3
 import time, os, socket, random, sys
