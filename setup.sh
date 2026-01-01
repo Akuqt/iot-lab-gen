@@ -82,6 +82,7 @@ echo "[2/8] Preparing Directory Structure..."
 mkdir -v -p "$BASE_DIR"/{certs,src,vms,logs}
 mkdir -v -p /var/lib/kea
 touch /var/lib/kea/kea-leases4.csv
+touch "$BASE_DIR/logs/iot_traffic.log"
 chown -R _kea:_kea /var/lib/kea
 chmod 755 /var/lib/kea
 
@@ -144,11 +145,12 @@ KEA_LEASE_FILE = '/var/lib/kea/kea-leases4.csv'
 FW_SYSLOG_HOST = os.getenv('FW_SYSLOG_HOST', '$GATEWAY_IP') 
 FW_SYSLOG_PORT = 10514
 HOSTNAME = "ib-appliance-01.lab.local"
+LOCAL_LOG = "logs/iot_traffic.log"
 
 # 1. Load the raw map from Bash
 RAW_MAP = $PYTHON_MAP_STR
 
-# 2. Normalize Keys to Lowercase (Fixes the mismatch issue)
+# 2. Normalize Keys to Lowercase
 PERSONA_MAP = {k.lower(): v for k, v in RAW_MAP.items()}
 
 def send_syslog(ip, mac, data):
@@ -156,15 +158,13 @@ def send_syslog(ip, mac, data):
     ts = datetime.now().strftime('%b %d %H:%M:%S')
     pid = random.randint(1000, 9999)
     
-    # Safe data extraction
     p_name = data.get('name', 'Unknown')
     p_vci = data.get('vci', 'Unknown')
     
-    # Construct RFC-compliant Syslog message
-    # <134> = Facility Local0 (16) * 8 + Severity Info (6)
     msg = f"dhcpd[{pid}]: DHCPACK on {ip} to {mac} ({p_name}) via eth1 relay option-60:\"{p_vci}\" option-61:\"{mac}\""
     pkt = f"<134>{ts} {HOSTNAME} {msg}"
     
+    # 1. Send to Firewall
     try: 
         sock.sendto(pkt.encode(), (FW_SYSLOG_HOST, FW_SYSLOG_PORT))
         print(f"[+] Sent: {msg}")
@@ -172,16 +172,20 @@ def send_syslog(ip, mac, data):
     except Exception as e:
         print(f"[-] Socket Error: {e}")
 
+    # 2. Log locally
+    try:
+        with open(LOCAL_LOG, "a") as f:
+            f.write(f"{datetime.now()} [SYSLOG] Target: {FW_SYSLOG_HOST} | Payload: {msg}\n")
+    except: pass
+
 def monitor():
     print(f"[*] Monitoring Leases file: {KEA_LEASE_FILE}")
     print(f"[*] Target Syslog: {FW_SYSLOG_HOST}:{FW_SYSLOG_PORT}")
     
-    # Ensure file exists
     if not os.path.exists(KEA_LEASE_FILE): 
         open(KEA_LEASE_FILE, 'a').close()
         
     f = open(KEA_LEASE_FILE, 'r')
-    # Move to end of file to avoid re-sending old leases on restart
     f.seek(0, 2) 
     
     while True:
@@ -194,15 +198,10 @@ def monitor():
             parts = line.strip().split(',')
             if len(parts) > 2:
                 ip = parts[0]
-                # Normalize lease MAC to lower for lookup
                 mac = parts[1].lower()
                 
                 if mac in PERSONA_MAP: 
                     send_syslog(ip, mac, PERSONA_MAP[mac])
-                else:
-                    # Optional: Uncomment to see unmatched MACs
-                    # print(f"[*] Ignored unknown MAC: {mac}")
-                    pass
         except Exception as e:
             print(f"[-] Parse Error: {e}")
 
@@ -254,36 +253,30 @@ def run_traffic():
     
     while True:
         try:
-            # --- DNS ---
             if "DNS" in protos:
                 dns_targets = CONFIG.get('targets', {}).get('DNS', [])
                 for fqdn in dns_targets:
                     try: socket.gethostbyname(fqdn)
                     except: pass
 
-            # --- NTP ---
             if "NTP" in protos:
                  t_ip = get_target_ip("NTP")
                  if t_ip:
-                     # NTP v3 Client Packet (Mode 3, Version 3)
                      payload = b'\x1b' + 47 * b'\0'
                      send_udp(t_ip, 123, payload)
 
-            # --- SIP ---
             if "SIP" in protos:
                 t_host = random.choice(CONFIG['targets'].get('SIP', []))
                 t_ip = resolve_or_raw(t_host)
                 payload = f"REGISTER sip:{t_host} SIP/2.0\r\nVia: SIP/2.0/UDP {t_host}:5060\r\nFrom: <sip:iot@{t_host}>\r\n\r\n".encode()
                 send_udp(t_ip, 5060, payload)
 
-            # --- SNMP ---
             if "SNMP" in protos:
                 t_ip = get_target_ip("SNMP")
                 if t_ip:
                     payload = b'\x30\x29\x02\x01\x01\x04\x06public\xa0\x1c\x02\x04\x12\x34\x56\x78\x02\x01\x00\x02\x01\x00\x30\x0e\x30\x0c\x06\x08\x2b\x06\x01\x02\x01\x01\x01\x00\x05\x00'
                     send_udp(t_ip, 161, payload)
 
-            # --- HTTP ---
             if "HTTP" in protos:
                 t_host = random.choice(CONFIG['targets'].get('HTTP', []))
                 try: requests.get(f"http://{t_host}", headers={'User-Agent': ua}, timeout=2)
@@ -294,21 +287,18 @@ def run_traffic():
                 try: requests.get(f"https://{t_host}", headers={'User-Agent': ua}, timeout=2, verify=False)
                 except: pass
 
-            # --- MQTT ---
             if "MQTT" in protos:
                 t_ip = get_target_ip("MQTT")
                 if t_ip:
                     payload = b'\x10\x0c\x00\x04MQTT\x04\x02\x00\x3c\x00\x00'
                     send_tcp(t_ip, 1883, payload)
 
-            # --- CoAP ---
             if "CoAP" in protos:
                 t_ip = get_target_ip("CoAP")
                 if t_ip:
                     payload = b'\x40\x01' + random.randbytes(2)
                     send_udp(t_ip, 5683, payload)
 
-            # --- Zigbee ---
             if "Zigbee" in protos:
                  t_ip = get_target_ip("Zigbee")
                  if t_ip:
@@ -349,8 +339,10 @@ echo "[5/8] Building VM Images..."
 SEARCH_URL="https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/cloud/"
 FILENAME=$(wget -O- "$SEARCH_URL" | grep -o 'nocloud_alpine-[0-9.]\+-aarch64-uefi-cloudinit-r[0-9]\+\.qcow2' | sort -V | tail -n 1)
 
-if [ ! -f "alpine-base.qcow2" ]; then 
-    wget -O "alpine-base.qcow2" "${SEARCH_URL}${FILENAME}"
+# Fix: Download base image to vms/ directory
+if [ ! -f "vms/alpine-base.qcow2" ]; then 
+    echo "[*] Downloading Alpine Base Image to ./vms/..."
+    wget -O "vms/alpine-base.qcow2" "${SEARCH_URL}${FILENAME}"
 fi
 
 ROOT_PASS="password"
@@ -369,7 +361,8 @@ for i in $(seq 0 $((COUNT-1))); do
 
     echo "[*] Customizing VM ${IDX}: $CURr_NAME..."
     rm -f "$IMG_NAME"
-    qemu-img create -f qcow2 -b "../alpine-base.qcow2" -F qcow2 "$IMG_NAME" 1G
+    # Fix: Reference base image in local vms/ dir
+    qemu-img create -f qcow2 -b "alpine-base.qcow2" -F qcow2 "$IMG_NAME" 1G
     
     virt-customize -a "$IMG_NAME" --hostname "$CURr_NAME" --root-password password:$ROOT_PASS \
         --run-command "mkdir -p /etc/cloud && touch /etc/cloud/cloud-init.disabled" \
@@ -526,6 +519,7 @@ function show_help {
     echo "  restart       Restart the environment"
     echo "  status        Show status of VMs, Network, and DHCP"
     echo "  connect <ID>  Connect to VM Console (e.g., iot_lab connect 01)"
+    echo "  log <TARGET>  Tail log files (TARGET: 'syslog' or VM ID like '01')"
     echo "  clean         DESTROY the lab (Delete data and configurations)"
     echo "  help          Shows this help message."
 }
@@ -538,7 +532,6 @@ function wait_for_interface {
     echo -n "    ... checking for interface \$INTERFACE"
     while [ \$ATTEMPT -le \$MAX_ATTEMPTS ]; do
         # Check if interface exists and is Administratively UP
-        # We allow UNKNOWN (no carrier) or UP.
         STATE=\$(ip -o link show \$INTERFACE 2>/dev/null | grep -oE 'state (UP|UNKNOWN)')
         if [ ! -z "\$STATE" ]; then
             echo " [OK]"
@@ -642,6 +635,28 @@ case \$ACTION in
     echo "    (Press Ctrl+C to exit console)"
     sudo socat - UNIX-CONNECT:\$SOCK
     ;;
+  log)
+    if [ -z "\$ARG" ]; then
+        echo "Error: Please specify target (syslog or VM ID)"
+        exit 1
+    fi
+    
+    if [ "\$ARG" == "syslog" ]; then
+        FILE="\$BASE_DIR/logs/iot_traffic.log"
+        echo "[*] Tailing Syslog Traffic (\$FILE)..."
+    else
+        ID=\$(printf "%02d" \$ARG)
+        FILE="\$BASE_DIR/logs/vm_\$ID.log"
+        echo "[*] Tailing VM \$ID Serial Output (\$FILE)..."
+    fi
+    
+    if [ ! -f "\$FILE" ]; then
+        echo "Error: Log file \$FILE not found."
+        exit 1
+    fi
+    
+    tail -f "\$FILE"
+    ;;
   clean)
     echo "[!] WARNING: This will DESTROY the lab environment."
     read -p "Are you sure? (y/N) " confirm
@@ -708,6 +723,7 @@ echo "     stop          Stop all VMs and services"
 echo "     restart       Restart the environment"
 echo "     status        Show status of VMs, Network, and DHCP"
 echo "     connect <ID>  Connect to VM Console (e.g., iot_lab connect 01)"
+echo "     log <TARGET>  Tail logs. Target: 'syslog' or VM ID (e.g., 01)"
 echo "     clean         DESTROY the lab (Delete data and configurations)"
 echo "     help          Shows this help message."
 echo ""
