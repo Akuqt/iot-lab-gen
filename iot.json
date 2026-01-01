@@ -1,0 +1,282 @@
+[
+  {
+    "name": "GE_MAC_2000_ECG",
+    "mac": "00:01:30:AA:11:01",
+    "vci": "GE-Healthcare/MAC2000/v1.0",
+    "ttl": 128,
+    "cadence": 15,
+    "protocols": ["HTTPS", "SNMP", "DNS", "NTP"],
+    "user_agent": "GE_Medical_Systems/MAC2000",
+    "targets": {
+      "DNS": ["updates.gehealthcare.com", "remote-service.ge.com", "pool.ntp.org"],
+      "HTTPS": ["updates.gehealthcare.com"],
+      "SNMP": ["8.8.8.8"],
+      "NTP": ["pool.ntp.org"]
+    }
+  },
+  {
+    "name": "Philips_IntelliVue_MX40",
+    "mac": "00:09:F3:1A:2B:02",
+    "vci": "Philips-Patient-Monitor/MX40",
+    "ttl": 64,
+    "cadence": 5,
+    "protocols": ["HTTPS", "DNS"],
+    "user_agent": "Philips-IntelliVue/MX40",
+    "targets": {
+      "DNS": ["services.philips.com", "philips.com"],
+      "HTTPS": ["services.philips.com"]
+    }
+  },
+  {
+    "name": "Baxter_Sigma_Spectrum_Pump",
+    "mac": "00:00:86:CC:33:03",
+    "vci": "Baxter/Infusion/Sigma",
+    "ttl": 64,
+    "cadence": 20,
+    "protocols": ["HTTPS", "DNS"],
+    "user_agent": "Baxter_Sigma_Spectrum/8.0",
+    "targets": {
+      "DNS": ["gateway.baxter.com", "connectivity.baxter.com"],
+      "HTTPS": ["gateway.baxter.com"]
+    }
+  },
+  {
+    "name": "Siemens_Somatom_CT",
+    "mac": "00:19:99:44:55:04",
+    "vci": "Siemens/Medical/Somatom",
+    "ttl": 128,
+    "cadence": 30,
+    "protocols": ["HTTPS", "DNS", "NTP"],
+    "user_agent": "Siemens_Syngo/2023",
+    "targets": {
+      "DNS": ["remote.siemens-healthineers.com", "update.siemens.com", "time.windows.com"],
+      "HTTPS": ["remote.siemens-healthineers.com"],
+      "NTP": ["time.windows.com"]
+    }
+  },
+  {
+    "name": "Medtronic_CareLink_Monitor",
+    "mac": "00:26:50:66:77:05",
+    "vci": "Medtronic/CareLink/2.0",
+    "ttl": 64,
+    "cadence": 60,
+    "protocols": ["HTTPS", "DNS"],
+    "user_agent": "Medtronic-CareLink/Monitor",
+    "targets": {
+      "DNS": ["carelink.medtronic.com", "monitor.medtronic.com"],
+      "HTTPS": ["carelink.medtronic.com"]
+    }
+  },
+  {
+    "name": "Rockwell_CompactLogix_PLC",
+    "mac": "00:00:BC:88:99:06",
+    "vci": "Rockwell/EtherNet-IP/Logix",
+    "ttl": 64,
+    "cadence": 5,
+    "protocols": ["HTTP", "MQTT", "DNS", "NTP"],
+    "user_agent": "Rockwell-Automation/Cloud-Connector",
+    "targets": {
+      "DNS": ["api.rockwellautomation.com", "test.mosquitto.org", "pool.ntp.org"],
+      "HTTP": ["api.rockwellautomation.com"],
+      "MQTT": ["test.mosquitto.org"],
+      "NTP": ["pool.ntp.org"]
+    }
+  },
+  {
+    "name": "Siemens_S7_1200_PLC",
+    "mac": "00:1C:06:AA:BB:07",
+    "vci": "Siemens/Simatic/S7",
+    "ttl": 64,
+    "cadence": 4,
+    "protocols": ["CoAP", "DNS", "NTP"],
+    "user_agent": "Simatic-S7-1200/IoT-Gateway",
+    "targets": {
+      "DNS": ["coap.me", "californium.eclipse.org", "ptbtime1.ptb.de"],
+      "CoAP": ["coap.me"],
+      "NTP": ["ptbtime1.ptb.de"]
+    }
+  },
+  {
+    "name": "Schneider_Modicon_M580",
+    "mac": "00:00:54:CC:DD:08",
+    "vci": "Schneider/Modicon/M580",
+    "ttl": 64,
+    "cadence": 6,
+    "protocols": ["HTTPS", "DNS"],
+    "user_agent": "Schneider-Electric/EcoStruxure",
+    "targets": {
+      "DNS": ["ecostruxure.schneider-electric.com", "api.se.com"],
+      "HTTPS": ["api.se.com"]
+    }
+  },
+  {
+    "name": "Moxa_NPort_Gateway",
+    "mac": "00:90:E8:EE:FF:09",
+    "vci": "Moxa/NPort/Cloud",
+    "ttl": 64,
+    "cadence": 15,
+    "protocols": ["HTTPS", "SNMP", "DNS", "NTP"],
+    "user_agent": "Moxa_NPort/Cloud-Agent",
+    "targets": {
+      "DNS": ["license.moxa.com", "snmp.cloud-monitor.net", "pool.ntp.org"],
+      "HTTPS": ["license.moxa.com"],
+      "SNMP": ["8.8.8.8"],
+      "NTP": ["pool.ntp.org"]
+    }
+  },
+  {
+    "name": "Fanuc_Robot_Controller",
+    "mac": "00:E0:E4:11:22:10",
+    "vci": "Fanuc/Robot/R2000",
+    "ttl": 128,
+    "cadence": 8,
+    "protocols": ["MQTT", "DNS"],
+    "user_agent": "Fanuc-ZDT/Analytics",
+    "targets": {
+      "DNS": ["broker.hivemq.com", "zdt.fanucamerica.com"],
+      "MQTT": ["broker.hivemq.com"]
+    }
+  },
+  {
+    "name": "Cisco_IP_Phone_8865",
+    "mac": "00:30:96:33:44:11",
+    "vci": "Cisco/SPA/8865",
+    "ttl": 64,
+    "cadence": 30,
+    "protocols": ["SIP", "HTTPS", "DNS", "NTP"],
+    "user_agent": "Cisco-CP8865/12.5",
+    "targets": {
+      "DNS": ["sip.linphone.org", "cisco.com", "pool.ntp.org"],
+      "SIP": ["sip.linphone.org"],
+      "HTTPS": ["cisco.com"],
+      "NTP": ["pool.ntp.org"]
+    }
+  },
+  {
+    "name": "Polycom_Trio_8800",
+    "mac": "00:04:F2:55:66:12",
+    "vci": "Polycom/Trio/8800",
+    "ttl": 64,
+    "cadence": 30,
+    "protocols": ["SIP", "HTTPS", "DNS", "NTP"],
+    "user_agent": "PolycomSoundStation/Trio-5.9",
+    "targets": {
+      "DNS": ["sip.antisip.com", "polycom.com", "pool.ntp.org"],
+      "SIP": ["sip.antisip.com"],
+      "HTTPS": ["polycom.com"],
+      "NTP": ["pool.ntp.org"]
+    }
+  },
+  {
+    "name": "HP_LaserJet_Enterprise",
+    "mac": "00:25:B3:77:88:13",
+    "vci": "HP/Printer/LaserJet",
+    "ttl": 255,
+    "cadence": 60,
+    "protocols": ["HTTPS", "DNS"],
+    "user_agent": "HP-LaserJet-M507/Firmware-4.10",
+    "targets": {
+      "DNS": ["print.hp.com", "google.com", "instantink.hpconnected.com"],
+      "HTTPS": ["instantink.hpconnected.com"]
+    }
+  },
+  {
+    "name": "Meraki_MR56_AP",
+    "mac": "E0:55:3D:99:AA:14",
+    "vci": "Meraki/MR56/Cloud",
+    "ttl": 64,
+    "cadence": 10,
+    "protocols": ["HTTPS", "DNS", "NTP"],
+    "user_agent": "Meraki/1.0",
+    "targets": {
+      "DNS": ["n123.meraki.com", "dashboard.meraki.com", "pool.ntp.org"],
+      "HTTPS": ["dashboard.meraki.com"],
+      "NTP": ["pool.ntp.org"]
+    }
+  },
+  {
+    "name": "Axis_Q3517_Camera",
+    "mac": "AC:CC:8E:BB:CC:15",
+    "vci": "Axis/Camera/Q3517",
+    "ttl": 64,
+    "cadence": 15,
+    "protocols": ["HTTPS", "DNS", "NTP"],
+    "user_agent": "Axis/10.12.3",
+    "targets": {
+      "DNS": ["pool.ntp.org", "fw.axis.com"],
+      "HTTPS": ["fw.axis.com"],
+      "NTP": ["pool.ntp.org"]
+    }
+  },
+  {
+    "name": "Nest_Learning_Thermostat",
+    "mac": "18:B4:30:DD:EE:16",
+    "vci": "Nest/Thermostat/Gen3",
+    "ttl": 64,
+    "cadence": 60,
+    "protocols": ["HTTPS", "DNS", "NTP"],
+    "user_agent": "Nest/5.6.3",
+    "targets": {
+      "DNS": ["home.nest.com", "time.google.com", "firebase-api.com"],
+      "HTTPS": ["home.nest.com"],
+      "NTP": ["time.google.com"]
+    }
+  },
+  {
+    "name": "Ring_Video_Doorbell_4",
+    "mac": "34:15:13:FF:00:17",
+    "vci": "Ring/Doorbell/v4",
+    "ttl": 64,
+    "cadence": 45,
+    "protocols": ["SIP", "HTTPS", "DNS", "NTP"],
+    "user_agent": "Ring/3.23.0 (iPhone; iOS 14.2; Scale/3.00)",
+    "targets": {
+      "DNS": ["fw.ring.com", "sip.ring.com", "pool.ntp.org"],
+      "SIP": ["sip.ring.com"],
+      "HTTPS": ["fw.ring.com"],
+      "NTP": ["pool.ntp.org"]
+    }
+  },
+  {
+    "name": "Philips_Hue_Bridge",
+    "mac": "00:17:88:11:22:18",
+    "vci": "Philips-Hue/Bridge/BSB002",
+    "ttl": 64,
+    "cadence": 30,
+    "protocols": ["HTTPS", "DNS", "NTP"],
+    "user_agent": "Hue-Bridge/1.45.0",
+    "targets": {
+      "DNS": ["diagnostics.meethue.com", "ws.meethue.com", "pool.ntp.org"],
+      "HTTPS": ["ws.meethue.com"],
+      "NTP": ["pool.ntp.org"]
+    }
+  },
+  {
+    "name": "Samsung_QLED_TV",
+    "mac": "CC:B1:1A:33:44:19",
+    "vci": "Samsung/Tizen/TV",
+    "ttl": 128,
+    "cadence": 120,
+    "protocols": ["HTTPS", "DNS", "NTP"],
+    "user_agent": "Mozilla/5.0 (SMART-TV; LINUX; Tizen 6.0) AppleWebkit/538.1",
+    "targets": {
+      "DNS": ["samsungotn.net", "netflix.com", "pool.ntp.org"],
+      "HTTPS": ["samsungotn.net"],
+      "NTP": ["pool.ntp.org"]
+    }
+  },
+  {
+    "name": "Tesla_Wall_Connector",
+    "mac": "44:39:C4:55:66:20",
+    "vci": "Tesla/WallConnector/Gen3",
+    "ttl": 64,
+    "cadence": 45,
+    "protocols": ["HTTPS", "DNS", "NTP"],
+    "user_agent": "Tesla-Wall-Connector/21.36.4",
+    "targets": {
+      "DNS": ["energy.tesla.com", "firmware.tesla.com", "pool.ntp.org"],
+      "HTTPS": ["energy.tesla.com"],
+      "NTP": ["pool.ntp.org"]
+    }
+  }
+]
