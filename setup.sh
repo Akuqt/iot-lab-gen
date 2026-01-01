@@ -223,12 +223,11 @@ def run_traffic():
                     try: socket.gethostbyname(fqdn)
                     except: pass
 
-            # --- NTP (NEW) ---
+            # --- NTP ---
             if "NTP" in protos:
                  t_ip = get_target_ip("NTP")
                  if t_ip:
                      # NTP v3 Client Packet (Mode 3, Version 3)
-                     # \x1b = 00011011 (LI=0, VN=3, Mode=3)
                      payload = b'\x1b' + 47 * b'\0'
                      send_udp(t_ip, 123, payload)
 
@@ -352,20 +351,20 @@ echo ""
 echo "[6/8] Configuring Launcher Scripts..."
 MAC_LIST_STR="${FINAL_MACS[*]}"
 
-# --- Network Script (Fixed for Kea Race Condition) ---
+# --- Network Script (Safe Bridge Init) ---
 cat << EOF > /usr/local/bin/iot-lab-network
 #!/bin/bash
 modprobe tun 2>/dev/null || true
 modprobe virtio_net 2>/dev/null || true
 sysctl -w net.ipv4.ip_forward=1
 
-# Ensure bridge is created or exists
+# Ensure bridge exists
 if ! ip link show br-iot >/dev/null 2>&1; then
     ip link add name br-iot type bridge
     ip addr add $GATEWAY_IP/24 dev br-iot
 fi
 
-# Force UP state and wait
+# Bring up bridge and wait for state to settle (prevents Kea race condition)
 ip link set br-iot up
 sleep 2
 
@@ -381,7 +380,7 @@ exit 0
 EOF
 chmod +x /usr/local/bin/iot-lab-network
 
-# --- VM Launcher (Fixed Serial Console & Logs) ---
+# --- VM Launcher (Fixed Serial Console) ---
 cat << EOF > /usr/local/bin/iot-lab-launch
 #!/bin/bash
 cd $BASE_DIR
@@ -494,14 +493,47 @@ function show_help {
     echo "  help          Shows this help message."
 }
 
+function check_dhcp_port {
+    # Loop to verify port 67 is open before proceeding
+    for i in {1..10}; do
+        if ss -tulpn | grep -q ":67 "; then
+            return 0
+        fi
+        echo "    ... waiting for DHCP to listen (attempt \$i/10)"
+        sleep 1
+    done
+    return 1
+}
+
 case \$ACTION in
   start)
     echo "[*] Starting services..."
+    
+    # 1. Network Layer (Wait included in script)
     sudo systemctl start iot-network
+    
+    # 2. DHCP Layer
+    echo "[*] Starting DHCP Server..."
     sudo systemctl restart kea-dhcp4-server
+    
+    # 3. Validation Check
+    if ! check_dhcp_port; then
+        echo "[!] ERROR: Kea DHCP failed to bind port 67."
+        echo "    Attempting restart..."
+        sudo systemctl restart kea-dhcp4-server
+        sleep 2
+        if ! check_dhcp_port; then
+             echo "[!] CRITICAL: DHCP still not listening. Aborting VM launch."
+             echo "    Check logs: sudo journalctl -u kea-dhcp4-server"
+             exit 1
+        fi
+    fi
+    echo "    [+] DHCP Listening on Port 67."
+
+    # 4. App Layer
     sudo systemctl start iot-syslog
     sudo systemctl start iot-vms
-    echo "[+] Done."
+    echo "[+] Environment Started Successfully."
     ;;
   stop)
     echo "[*] Stopping services..."
@@ -581,12 +613,12 @@ if ss -tulpn | grep ":67 " | grep -q "dnsmasq"; then
 fi
 chown -R $REAL_USER:$REAL_USER "$BASE_DIR"
 
+# Clean start
 systemctl daemon-reload
 systemctl enable iot-network iot-syslog iot-vms
-systemctl start iot-network
-systemctl restart kea-dhcp4-server
-systemctl start iot-syslog
-systemctl start iot-vms
+
+echo "[*] Invoking 'iot_lab start' to initialize environment..."
+/usr/local/bin/iot_lab start
 
 echo ""
 echo "================================================================"
