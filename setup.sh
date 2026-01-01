@@ -351,7 +351,7 @@ echo ""
 echo "[6/8] Configuring Launcher Scripts..."
 MAC_LIST_STR="${FINAL_MACS[*]}"
 
-# --- Network Script (Safe Bridge Init) ---
+# --- Network Script ---
 cat << EOF > /usr/local/bin/iot-lab-network
 #!/bin/bash
 modprobe tun 2>/dev/null || true
@@ -364,9 +364,9 @@ if ! ip link show br-iot >/dev/null 2>&1; then
     ip addr add $GATEWAY_IP/24 dev br-iot
 fi
 
-# Force UP state and WAIT for kernel to register it
+# Force UP state 
 ip link set br-iot up
-sleep 2
+sleep 5
 
 # Taps
 for i in \$(seq -w 01 $COUNT); do
@@ -380,27 +380,24 @@ exit 0
 EOF
 chmod +x /usr/local/bin/iot-lab-network
 
-# --- VM Launcher (Fixed Serial Console) ---
+# --- VM Launcher ---
 cat << EOF > /usr/local/bin/iot-lab-launch
 #!/bin/bash
 cd $BASE_DIR
 EFI="/usr/share/qemu-efi-aarch64/QEMU_EFI.fd"
 MACS=($MAC_LIST_STR)
-for i in \$(seq -w 01 $COUNT); do
-    # Remove leading zero for array indexing
-    IDX_NUM=\$(echo \$i | sed 's/^0*//')
-    IDX_ARR=\$((IDX_NUM - 1))
+for i in \$(seq 0 \$(( $COUNT - 1 ))); do
+    IDX=\$(printf "%02d" \$((i+1)))
+    echo "Booting VM \$IDX with MAC \${MACS[\$i]}..."
     
-    echo "Booting VM \$i with MAC \${MACS[\$IDX_ARR]}..."
-    
-    nice -n 19 qemu-system-aarch64 -name "iot-\$i" -machine virt -cpu cortex-a57 -smp 1 -m 256M \\
-        -bios \$EFI -drive if=none,file="vms/iot-device-\${i}.qcow2",id=hd0,format=qcow2 \\
-        -device virtio-blk-device,drive=hd0 -netdev tap,id=net0,ifname="tap-iot\${i}",script=no,downscript=no \\
-        -device virtio-net-device,netdev=net0,mac=\${MACS[\$IDX_ARR]} -device virtio-rng-pci \\
+    nice -n 19 qemu-system-aarch64 -name "iot-\$IDX" -machine virt -cpu cortex-a57 -smp 1 -m 256M \\
+        -bios \$EFI -drive if=none,file="vms/iot-device-\${IDX}.qcow2",id=hd0,format=qcow2 \\
+        -device virtio-blk-device,drive=hd0 -netdev tap,id=net0,ifname="tap-iot\${IDX}",script=no,downscript=no \\
+        -device virtio-net-device,netdev=net0,mac=\${MACS[\$i]} -device virtio-rng-pci \\
         -display none -daemonize \\
-        -chardev socket,id=char0,path=logs/vm_\${i}.sock,server=on,wait=off,logfile=logs/vm_\${i}.log \\
+        -chardev socket,id=char0,path=logs/vm_\${IDX}.sock,server=on,wait=off,logfile=logs/vm_\${IDX}.log \\
         -serial chardev:char0 \\
-        -D logs/qemu_debug_\${i}.log
+        -D logs/qemu_debug_\${IDX}.log
 done
 EOF
 chmod +x /usr/local/bin/iot-lab-launch
@@ -501,22 +498,30 @@ function wait_for_interface {
     ATTEMPT=1
     
     echo -n "    ... checking for interface \$INTERFACE"
-    
     while [ \$ATTEMPT -le \$MAX_ATTEMPTS ]; do
-        # Check if interface exists and is UP or UNKNOWN (bridges often show UNKNOWN)
+        # Check if interface exists and is Administratively UP
+        # We allow UNKNOWN (no carrier) or UP.
         STATE=\$(ip -o link show \$INTERFACE 2>/dev/null | grep -oE 'state (UP|UNKNOWN)')
-        
         if [ ! -z "\$STATE" ]; then
             echo " [OK]"
             return 0
         fi
-        
         echo -n "."
         sleep 1
         ATTEMPT=\$((ATTEMPT + 1))
     done
-    
     echo " [FAILED]"
+    return 1
+}
+
+function check_dhcp_port {
+    for i in {1..10}; do
+        if ss -tulpn | grep -q ":67 "; then
+            return 0
+        fi
+        echo "    ... waiting for DHCP to listen (attempt \$i/10)"
+        sleep 1
+    done
     return 1
 }
 
@@ -524,22 +529,39 @@ case \$ACTION in
   start)
     echo "[*] Starting services..."
     
-    # 1. Network Layer
+    # 1. Start Network Layer
     sudo systemctl start iot-network
     
-    # 2. Wait for Bridge State
+    # 2. Launch VMs (Required to bring bridge Operationally UP)
+    echo "[*] Launching VMs..."
+    sudo systemctl start iot-vms
+    
+    # 3. Wait for infrastructure to settle
+    echo "[*] Waiting for network bridge..."
+    sleep 10
     if ! wait_for_interface; then
-        echo "[!] CRITICAL: Bridge br-iot failed to come up. Aborting."
-        exit 1
+        echo "[!] WARNING: Bridge interface check failed. Kea might fail."
     fi
     
-    # 3. DHCP & Apps
+    # 4. Start DHCP
     echo "[*] Starting DHCP Server..."
     sudo systemctl restart kea-dhcp4-server
     
-    echo "[*] Starting Agents & VMs..."
+    # 5. Validate DHCP Listening
+    if ! check_dhcp_port; then
+        echo "[!] ERROR: DHCP failed to bind port 67. Restarting..."
+        sudo systemctl restart kea-dhcp4-server
+        sleep 2
+        if ! check_dhcp_port; then
+             echo "[!] CRITICAL: DHCP still not listening. Aborting."
+             echo "    Check: sudo journalctl -u kea-dhcp4-server"
+             exit 1
+        fi
+    fi
+    echo "    [+] DHCP Listening on Port 67."
+
+    # 6. Start Agents
     sudo systemctl start iot-syslog
-    sudo systemctl start iot-vms
     echo "[+] Environment Started Successfully."
     ;;
   stop)
