@@ -79,7 +79,6 @@ apt-get install -y qemu-system-arm qemu-utils bridge-utils kea-dhcp4-server \
 # 4. PREPARE ENVIRONMENT
 echo ""
 echo "[2/8] Preparing Directory Structure..."
-rm -rf "$BASE_DIR"
 mkdir -v -p "$BASE_DIR"/{certs,src,vms,logs}
 mkdir -v -p /var/lib/kea
 touch /var/lib/kea/kea-leases4.csv
