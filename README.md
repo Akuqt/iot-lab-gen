@@ -37,7 +37,7 @@ git clone https://github.com/Akuqt/iot-lab-gen.git
 2.  Make the script executable:
 
 ``` sh   
-cd iot-lab
+cd iot-lab-gen
 chmod +x setup.sh
 ```
 
@@ -115,10 +115,10 @@ sudo ./setup.sh -s 192.168.50.0/24 -n 10 -f 192.168.30.1 -j iot.json
 
 ## Directory Structure
 
-After installation, the environment is located at '~/iot-lab/':
+After installation, the environment is located at '~/iot-lab-gen/':
 
 ``` sh
-  ~/iot-lab/
+  ~/iot-lab-gen/
   |-- certs/                    # Stored Root CA certificates
   |-- src/                      # Source code for agents
   |   |-- dhcp_processor.py     # Syslog message generator
