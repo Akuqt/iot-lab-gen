@@ -130,7 +130,7 @@ echo ""
 echo "[4/8] Writing Agent Scripts..."
 
 # --- Syslog Processor ---
-# Fix: Sanitize map string to prevent SyntaxError (ensure max 2 closing braces)
+# Fix: Sanitize map string to prevent SyntaxError
 if [[ "${PYTHON_MAP_STR: -3}" == "}}}" ]]; then
     PYTHON_MAP_STR="${PYTHON_MAP_STR%?}"
 fi
@@ -139,42 +139,75 @@ cat << EOF > src/dhcp_processor.py
 #!/usr/bin/env python3
 import time, os, socket, random, sys
 from datetime import datetime
+
 KEA_LEASE_FILE = '/var/lib/kea/kea-leases4.csv'
 FW_SYSLOG_HOST = os.getenv('FW_SYSLOG_HOST', '$GATEWAY_IP') 
 FW_SYSLOG_PORT = 10514
 HOSTNAME = "ib-appliance-01.lab.local"
-PERSONA_MAP = $PYTHON_MAP_STR
+
+# 1. Load the raw map from Bash
+RAW_MAP = $PYTHON_MAP_STR
+
+# 2. Normalize Keys to Lowercase (Fixes the mismatch issue)
+PERSONA_MAP = {k.lower(): v for k, v in RAW_MAP.items()}
 
 def send_syslog(ip, mac, data):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     ts = datetime.now().strftime('%b %d %H:%M:%S')
     pid = random.randint(1000, 9999)
+    
+    # Safe data extraction
     p_name = data.get('name', 'Unknown')
     p_vci = data.get('vci', 'Unknown')
+    
+    # Construct RFC-compliant Syslog message
+    # <134> = Facility Local0 (16) * 8 + Severity Info (6)
     msg = f"dhcpd[{pid}]: DHCPACK on {ip} to {mac} ({p_name}) via eth1 relay option-60:\"{p_vci}\" option-61:\"{mac}\""
     pkt = f"<134>{ts} {HOSTNAME} {msg}"
+    
     try: 
         sock.sendto(pkt.encode(), (FW_SYSLOG_HOST, FW_SYSLOG_PORT))
         print(f"[+] Sent: {msg}")
         sys.stdout.flush()
-    except: pass
+    except Exception as e:
+        print(f"[-] Socket Error: {e}")
 
 def monitor():
-    print(f"[*] Monitoring Leases...")
-    if not os.path.exists(KEA_LEASE_FILE): open(KEA_LEASE_FILE, 'a').close()
+    print(f"[*] Monitoring Leases file: {KEA_LEASE_FILE}")
+    print(f"[*] Target Syslog: {FW_SYSLOG_HOST}:{FW_SYSLOG_PORT}")
+    
+    # Ensure file exists
+    if not os.path.exists(KEA_LEASE_FILE): 
+        open(KEA_LEASE_FILE, 'a').close()
+        
     f = open(KEA_LEASE_FILE, 'r')
-    processed = set()
+    # Move to end of file to avoid re-sending old leases on restart
+    f.seek(0, 2) 
+    
     while True:
-        where = f.tell(); line = f.readline()
-        if not line: time.sleep(1); f.seek(where); continue
-        if line in processed: continue
-        processed.add(line)
-        parts = line.strip().split(',')
-        if len(parts) > 2:
-            ip, mac = parts[0], parts[1].lower()
-            if mac in PERSONA_MAP: send_syslog(ip, mac, PERSONA_MAP[mac])
+        line = f.readline()
+        if not line: 
+            time.sleep(0.5)
+            continue
+            
+        try:
+            parts = line.strip().split(',')
+            if len(parts) > 2:
+                ip = parts[0]
+                # Normalize lease MAC to lower for lookup
+                mac = parts[1].lower()
+                
+                if mac in PERSONA_MAP: 
+                    send_syslog(ip, mac, PERSONA_MAP[mac])
+                else:
+                    # Optional: Uncomment to see unmatched MACs
+                    # print(f"[*] Ignored unknown MAC: {mac}")
+                    pass
+        except Exception as e:
+            print(f"[-] Parse Error: {e}")
 
-if __name__ == "__main__": monitor()
+if __name__ == "__main__": 
+    monitor()
 EOF
 
 # --- Traffic Generator ---
