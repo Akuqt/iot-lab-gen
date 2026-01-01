@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# IoT Lab Setup
+# IoT Lab Setup (Universal Architecture Support)
 # Italo Alfaro - 2026
 #
 # SPDX-License-Identifier: MIT
@@ -22,6 +22,48 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+
+# ==========================================
+# 1. ARCHITECTURE DETECTION & CONFIGURATION
+# ==========================================
+HOST_ARCH=$(uname -m)
+echo "[*] Detected Host Architecture: $HOST_ARCH"
+
+if [ "$HOST_ARCH" == "x86_64" ]; then
+    # --- Intel/AMD Configuration ---
+    QEMU_PKG="qemu-system-x86"
+    EFI_PKG="ovmf"
+    QEMU_BIN="qemu-system-x86_64"
+    ALPINE_ARCH="x86_64"
+    MACHINE_TYPE="q35"
+    CPU_FALLBACK="max"
+    # Search paths for x86 OVMF BIOS
+    BIOS_CANDIDATES=("/usr/share/OVMF/OVMF_CODE.fd" "/usr/share/ovmf/OVMF.fd" "/usr/share/qemu/OVMF.fd")
+
+elif [ "$HOST_ARCH" == "aarch64" ]; then
+    # --- ARM64 Configuration ---
+    QEMU_PKG="qemu-system-arm"
+    EFI_PKG="qemu-efi-aarch64"
+    QEMU_BIN="qemu-system-aarch64"
+    ALPINE_ARCH="aarch64"
+    MACHINE_TYPE="virt"
+    CPU_FALLBACK="cortex-a57"
+    # Search paths for ARM UEFI BIOS
+    BIOS_CANDIDATES=("/usr/share/qemu-efi-aarch64/QEMU_EFI.fd" "/usr/share/AAVMF/AAVMF_CODE.fd")
+
+else
+    echo "[!] Error: Unsupported Architecture $HOST_ARCH"
+    exit 1
+fi
+
+# Locate the correct BIOS file
+BIOS_PATH=""
+for path in "${BIOS_CANDIDATES[@]}"; do
+    if [ -f "$path" ]; then
+        BIOS_PATH="$path"
+        break
+    fi
+done
 
 # Default Values
 SUBNET=""
@@ -64,6 +106,20 @@ DHCP_START="${PREFIX}.100"
 DHCP_END="${PREFIX}.200"
 if [ -z "$FIREWALL_IP" ]; then FIREWALL_IP=$GATEWAY_IP; fi
 
+# Verify Hardware Acceleration Support
+if [ ! -e /dev/kvm ]; then
+    echo "================================================================"
+    echo " [!] CRITICAL WARNING: NO KVM SUPPORT DETECTED (/dev/kvm)"
+    echo "================================================================"
+    echo " VMs will run in Software Emulation Mode."
+    echo " EXPECT HIGH RAM USAGE AND SLOW PERFORMANCE."
+    echo "================================================================"
+    KVM_ARGS="-cpu $CPU_FALLBACK"
+else
+    # Enable KVM for near-native performance
+    KVM_ARGS="-enable-kvm -cpu host"
+fi
+
 echo "========================================"
 echo "      IoT Lab Deployment Started        "
 echo "========================================"
@@ -72,9 +128,22 @@ echo "========================================"
 echo ""
 echo "[1/8] Installing Dependencies..."
 apt-get update
-apt-get install -y qemu-system-arm qemu-utils bridge-utils kea-dhcp4-server \
-    python3-pip libguestfs-tools qemu-efi-aarch64 python3-scapy net-tools virtinst \
+# Install the dynamic packages based on architecture
+apt-get install -y "$QEMU_PKG" "$EFI_PKG" qemu-utils bridge-utils kea-dhcp4-server \
+    python3-pip libguestfs-tools python3-scapy net-tools virtinst \
     tmux jq socat
+
+if [ -z "$BIOS_PATH" ]; then
+    # Double check BIOS after install
+    for path in "${BIOS_CANDIDATES[@]}"; do
+        if [ -f "$path" ]; then BIOS_PATH="$path"; break; fi
+    done
+    if [ -z "$BIOS_PATH" ]; then
+        echo "[!] Error: Could not locate UEFI BIOS file. Checked: ${BIOS_CANDIDATES[*]}"
+        exit 1
+    fi
+fi
+echo "[*] Using BIOS: $BIOS_PATH"
 
 # 4. PREPARE ENVIRONMENT
 echo ""
@@ -336,12 +405,18 @@ EOF
 # 7. BUILD VMS
 echo ""
 echo "[5/8] Building VM Images..."
+# DYNAMIC IMAGE SELECTION BASED ON ARCH
+echo "[*] Searching for Alpine ($ALPINE_ARCH) cloud image..."
 SEARCH_URL="https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/cloud/"
-FILENAME=$(wget -O- "$SEARCH_URL" | grep -o 'nocloud_alpine-[0-9.]\+-aarch64-uefi-cloudinit-r[0-9]\+\.qcow2' | sort -V | tail -n 1)
+FILENAME=$(wget -O- "$SEARCH_URL" | grep -o "nocloud_alpine-[0-9.]\+-${ALPINE_ARCH}-uefi-cloudinit-r[0-9]\+\.qcow2" | sort -V | tail -n 1)
 
-# Fix: Download base image to vms/ directory
+if [ -z "$FILENAME" ]; then
+    echo "[!] Error: Could not find Alpine image for $ALPINE_ARCH at $SEARCH_URL"
+    exit 1
+fi
+
 if [ ! -f "vms/alpine-base.qcow2" ]; then 
-    echo "[*] Downloading Alpine Base Image to ./vms/..."
+    echo "[*] Downloading Alpine Base Image ($FILENAME) to ./vms/..."
     wget -O "vms/alpine-base.qcow2" "${SEARCH_URL}${FILENAME}"
 fi
 
@@ -361,7 +436,6 @@ for i in $(seq 0 $((COUNT-1))); do
 
     echo "[*] Customizing VM ${IDX}: $CURr_NAME..."
     rm -f "$IMG_NAME"
-    # Fix: Reference base image in local vms/ dir
     qemu-img create -f qcow2 -b "alpine-base.qcow2" -F qcow2 "$IMG_NAME" 1G
     
     virt-customize -a "$IMG_NAME" --hostname "$CURr_NAME" --root-password password:$ROOT_PASS \
@@ -411,17 +485,23 @@ exit 0
 EOF
 chmod +x /usr/local/bin/iot-lab-network
 
-# --- VM Launcher ---
+# --- VM Launcher (Dynamic Arch) ---
 cat << EOF > /usr/local/bin/iot-lab-launch
 #!/bin/bash
 cd $BASE_DIR
-EFI="/usr/share/qemu-efi-aarch64/QEMU_EFI.fd"
+# Using detected BIOS path
+EFI="$BIOS_PATH"
 MACS=($MAC_LIST_STR)
 for i in \$(seq 0 \$(( $COUNT - 1 ))); do
     IDX=\$(printf "%02d" \$((i+1)))
     echo "Booting VM \$IDX with MAC \${MACS[\$i]}..."
     
-    nice -n 19 qemu-system-aarch64 -name "iot-\$IDX" -machine virt -cpu cortex-a57 -smp 1 -m 256M \\
+    # KVM/QEMU Command built dynamically
+    # QEMU Binary: $QEMU_BIN
+    # Machine Type: $MACHINE_TYPE
+    # KVM Args: $KVM_ARGS
+    
+    nice -n 19 $QEMU_BIN -name "iot-\$IDX" -machine $MACHINE_TYPE $KVM_ARGS -smp 1 -m 256M \\
         -bios \$EFI -drive if=none,file="vms/iot-device-\${IDX}.qcow2",id=hd0,format=qcow2 \\
         -device virtio-blk-device,drive=hd0 -netdev tap,id=net0,ifname="tap-iot\${IDX}",script=no,downscript=no \\
         -device virtio-net-device,netdev=net0,mac=\${MACS[\$i]} -device virtio-rng-pci \\
@@ -519,7 +599,7 @@ function show_help {
     echo "  restart       Restart the environment"
     echo "  status        Show status of VMs, Network, and DHCP"
     echo "  connect <ID>  Connect to VM Console (e.g., iot_lab connect 01)"
-    echo "  log <TARGET>  Tail log files (TARGET: 'syslog' or VM ID like '01')"
+    echo "  log <TARGET>  Tail logs. Target: 'syslog' or VM ID (e.g., 01)"
     echo "  clean         DESTROY the lab (Delete data and configurations)"
     echo "  help          Shows this help message."
 }
@@ -531,7 +611,6 @@ function wait_for_interface {
     
     echo -n "    ... checking for interface \$INTERFACE"
     while [ \$ATTEMPT -le \$MAX_ATTEMPTS ]; do
-        # Check if interface exists and is Administratively UP
         STATE=\$(ip -o link show \$INTERFACE 2>/dev/null | grep -oE 'state (UP|UNKNOWN)')
         if [ ! -z "\$STATE" ]; then
             echo " [OK]"
@@ -563,11 +642,11 @@ case \$ACTION in
     # 1. Start Network Layer
     sudo systemctl start iot-network
     
-    # 2. Launch VMs (Required to bring bridge Operationally UP)
+    # 2. Launch VMs
     echo "[*] Launching VMs..."
     sudo systemctl start iot-vms
     
-    # 3. Wait for infrastructure to settle
+    # 3. Wait for infrastructure
     echo "[*] Waiting for network bridge..."
     sleep 10
     if ! wait_for_interface; then
@@ -578,7 +657,7 @@ case \$ACTION in
     echo "[*] Starting DHCP Server..."
     sudo systemctl restart kea-dhcp4-server
     
-    # 5. Validate DHCP Listening
+    # 5. Validate DHCP
     if ! check_dhcp_port; then
         echo "[!] ERROR: DHCP failed to bind port 67. Restarting..."
         sudo systemctl restart kea-dhcp4-server
@@ -602,6 +681,7 @@ case \$ACTION in
     sudo systemctl stop kea-dhcp4-server
     sudo systemctl stop iot-network
     sudo pkill -f qemu-system-aarch64
+    sudo pkill -f qemu-system-x86_64
     echo "[-] Done."
     ;;
   restart) \$0 stop; sleep 2; \$0 start ;;
@@ -625,12 +705,10 @@ case \$ACTION in
     fi
     ID=\$(printf "%02d" \$ARG)
     SOCK="\$BASE_DIR/logs/vm_\$ID.sock"
-    
     if [ ! -S "\$SOCK" ]; then
         echo "Error: Socket \$SOCK not found. Is the VM running?"
         exit 1
     fi
-    
     echo "[*] Connecting to IoT Device \$ID..."
     echo "    (Press Ctrl+C to exit console)"
     sudo socat - UNIX-CONNECT:\$SOCK
@@ -640,7 +718,6 @@ case \$ACTION in
         echo "Error: Please specify target (syslog or VM ID)"
         exit 1
     fi
-    
     if [ "\$ARG" == "syslog" ]; then
         FILE="\$BASE_DIR/logs/iot_traffic.log"
         echo "[*] Tailing Syslog Traffic (\$FILE)..."
@@ -649,12 +726,10 @@ case \$ACTION in
         FILE="\$BASE_DIR/logs/vm_\$ID.log"
         echo "[*] Tailing VM \$ID Serial Output (\$FILE)..."
     fi
-    
     if [ ! -f "\$FILE" ]; then
         echo "Error: Log file \$FILE not found."
         exit 1
     fi
-    
     tail -f "\$FILE"
     ;;
   clean)
@@ -710,6 +785,7 @@ echo "   Devices:  $COUNT"
 echo "   Sunet:    $SUBNET"
 echo "   Gateway:  $GATEWAY_IP"
 echo "   Syslog:   $FIREWALL_IP"
+echo "   Arch:     $HOST_ARCH"
 echo "================================================================"
 echo ""
 echo "--- MANAGEMENT COMMANDS ---"
