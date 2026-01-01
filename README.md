@@ -145,10 +145,7 @@ After installation, the environment is located at '~/iot-lab/':
 
 ## Notes
 
-Before running this script, ensure your host machine is correctly sized. Each simulated IoT device requires **1 vCPU** and **256MB of RAM**.
-
-> * **10 Devices:** ~2.5 GB RAM / 10 vCPUs (shared)
-> * **20 Devices:** ~5.0 GB RAM / 20 vCPUs (shared)
+Before running this script, ensure your host machine is correctly sized. Each simulated IoT device requires **1 vCPU** and **256MB of RAM** but they normally use more ***RAM***.
 
 Creating more devices than your host can handle may lead to system instability, freezing, or OOM (Out of Memory) kills.
 
