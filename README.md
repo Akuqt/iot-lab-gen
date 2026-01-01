@@ -6,6 +6,7 @@ It spins up lightweight QEMU/Alpine VMs that mimic real-world devices (Medical, 
 
 ## Key Features
 
+* Dynamic host architecture detection (x86_64 or ARM).
 * Dynamic Device Personas: Define devices in a simple 'iot.json' file.
 * Realistic Traffic Generation: Agents generate live traffic for HTTP/S, DNS, SIP, MQTT, CoAP, SNMP, NTP, and Zigbee (tunneling).
 * DHCP Fingerprinting: Real Vendor Class Identifiers (VCI) and OUIs, perfect for testing Device Identification features in Palo Alto Firewalls.
@@ -17,10 +18,11 @@ It spins up lightweight QEMU/Alpine VMs that mimic real-world devices (Medical, 
 * OS: Ubuntu 20.04/22.04 LTS or Debian 11/12 (Script uses 'apt-get').
 * Hardware: CPU with Virtualization support.
 * Privileges: Root access (via 'sudo').
+* Firewall: Palo Alto Firewall with a valid IoT Subscription.
 
 ### Infrastructure 
 
-![Infra](diag.svg)
+![Infra](docs/diag.svg)
 
 *Note: Tested on Ubuntu 22.04 running inside an AWS EC2 instance (c7g.xlarge) with 3 Qemu VMs.*
 
@@ -29,7 +31,7 @@ It spins up lightweight QEMU/Alpine VMs that mimic real-world devices (Medical, 
 1.  Clone the Repository:
 
 ``` sh    
-git clone https://github.com/Akuqt/iot-lab-gen.git
+git clone <url>
 ```
 
 2.  Make the script executable:
@@ -46,7 +48,7 @@ Run the setup script with 'sudo'. The script will automatically install dependen
 ### Syntax
 
 ``` sh
-sudo ./setup.sh -s <subnet> -n <count> [-j <json_file>] [-f <firewall_ip>] [-c <cert_path>]
+sudo ./setup.sh -s <subnet> -n <count> -j <json_file> -f <firewall_ip> [-c <cert_path>]
 ```
 
 ### Arguments
@@ -94,6 +96,7 @@ The lab is driven by the 'iot.json' file. This file defines the "Persona" of eve
 #### Protocols Available:
 
 * DNS
+* NTP
 * SIP
 * SNMP
 * HTTP
@@ -108,24 +111,6 @@ Deploy 10 devices on 192.168.50.0/24 using the default iot.json:
 
 ``` sh
 sudo ./setup.sh -s 192.168.50.0/24 -n 10 -f 192.168.30.1 -j iot.json
-```
-
-## Managing the Lab
-
-Once deployed, a helper script is generated at '/usr/local/bin/iot_lab'. Use this to control the environment.
-
-```sh
-Usage: iot_lab <command> [option]
-
-Commands:
-
-  start         Start the lab environment.
-  stop          Stop all VMs and services.
-  restart       Restart the environment.
-  status        Show status of VMs, Network, and DHCP.
-  connect <ID>  Connect to VM Console (e.g., iot_lab connect 01).
-  clean         DESTROY the lab (Delete data and configurations).
-  help          Shows this help message.
 ```
 
 ## Directory Structure
@@ -143,12 +128,54 @@ After installation, the environment is located at '~/iot-lab/':
   |-- logs/                     # Serial logs for debugging VMs
 ```
 
+## Managing the Lab
+
+Once deployed, a helper script is generated at '/usr/local/bin/iot_lab'. Use this to control the environment.
+
+```sh
+Usage: iot_lab <command> [option]
+
+Commands:
+
+  start         Start the lab environment.
+  stop          Stop all VMs and services.
+  restart       Restart the environment.
+  status        Show status of VMs, Network, and DHCP.
+  connect <ID>  Connect to VM Console (e.g., iot_lab connect 01).
+  log <TARGET>  Tail logs. Target: 'syslog' or VM ID (e.g., 01)"
+  clean         DESTROY the lab (Delete data and configurations).
+  help          Shows this help message.
+```
+
 ## Notes
 
-Before running this script, ensure your host machine is correctly sized. Each simulated IoT device requires **1 vCPU** and **256MB of RAM** but they normally use more ***RAM***.
+### Stability 
+
+Before running this script, ensure your host machine is correctly sized. Each simulated IoT device requires **1 vCPU** and **256MB of RAM** if **KVM** (Hardware Acceleration) is enabled. If **KVM** is disabled, **QEMU** is forced to use Software Emulation (**TCG**), creating a massive memory overhead.
 
 Creating more devices than your host can handle may lead to system instability, freezing, or OOM (Out of Memory) kills.
+
+### Infrastructure
+
+Make sure that the Palo Alto firewall is the default gateway of the Host so the simulated IoT devices can send packets through it and provide traffic signatures to enrich the Device Mappings.
+
+The firewall needs to have a route back to the IoT simulated environment subnet so traffic outside of LAN works.
+
+The firewall will need to have a [DHCP Log Ingestion Server][syslog_listener] configured in the Management interface to get the UDP packets from the Syslog processor in the IoT Host.
+
+If you are using SCM, you will need to configure this locally on the firewall due to SCM config limitation.
+
+After a successful deployment, you will see the devices in the IoT portal:
+
+![iot_portal](docs/iot_portal.png)
+
+*Note: Make sure that the firewall is running PAN-OS 11.1 or higher so IoT Security sends mappings for IoT devices regardless of their confidence score.*
 
 ## License
 
 MIT
+
+
+
+
+[syslog_listener]:https://docs.paloaltonetworks.com/iot/getting-started/firewall-deployment-for-device-visibility/use-dhcp-server-logs-to-increase-device-visibility
