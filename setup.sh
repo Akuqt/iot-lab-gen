@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# IoT Lab Setup (Universal Architecture Support)
+# IoT Lab Setup
 # Italo Alfaro - 2026
 #
 # SPDX-License-Identifier: MIT
@@ -22,6 +22,12 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+
+echo ""
+echo "========================================"
+echo "      IoT Lab Deployment Started        "
+echo "========================================"
+echo ""
 
 # ==========================================
 # 1. ARCHITECTURE DETECTION & CONFIGURATION
@@ -120,10 +126,6 @@ else
     KVM_ARGS="-enable-kvm -cpu host"
 fi
 
-echo "========================================"
-echo "      IoT Lab Deployment Started        "
-echo "========================================"
-
 # 3. INSTALL DEPENDENCIES
 echo ""
 echo "[1/8] Installing Dependencies..."
@@ -200,7 +202,6 @@ echo ""
 echo "[4/8] Writing Agent Scripts..."
 
 # --- Syslog Processor ---
-# Fix: Sanitize map string to prevent SyntaxError
 if [[ "${PYTHON_MAP_STR: -3}" == "}}}" ]]; then
     PYTHON_MAP_STR="${PYTHON_MAP_STR%?}"
 fi
