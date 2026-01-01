@@ -172,7 +172,7 @@ def monitor():
 if __name__ == "__main__": monitor()
 EOF
 
-# --- Traffic Generator ---
+# --- Traffic Generator (Updated with NTP) ---
 cat << 'EOF' > src/vm_agent.py
 #!/usr/bin/env python3
 import socket, time, random, requests, json, sys, ssl
@@ -352,15 +352,24 @@ echo ""
 echo "[6/8] Configuring Launcher Scripts..."
 MAC_LIST_STR="${FINAL_MACS[*]}"
 
+# --- Network Script (Fixed for Kea Race Condition) ---
 cat << EOF > /usr/local/bin/iot-lab-network
 #!/bin/bash
-modprobe tun; modprobe virtio_net
+modprobe tun 2>/dev/null || true
+modprobe virtio_net 2>/dev/null || true
 sysctl -w net.ipv4.ip_forward=1
+
+# Ensure bridge is created or exists
 if ! ip link show br-iot >/dev/null 2>&1; then
     ip link add name br-iot type bridge
     ip addr add $GATEWAY_IP/24 dev br-iot
-    ip link set br-iot up
 fi
+
+# Force UP state and wait
+ip link set br-iot up
+sleep 2
+
+# Taps
 for i in \$(seq -w 01 $COUNT); do
     if ! ip link show tap-iot\$i >/dev/null 2>&1; then
         ip tuntap add dev tap-iot\$i mode tap
@@ -368,10 +377,11 @@ for i in \$(seq -w 01 $COUNT); do
         ip link set tap-iot\$i up
     fi
 done
+exit 0
 EOF
 chmod +x /usr/local/bin/iot-lab-network
 
-# --- VM Launcher ---
+# --- VM Launcher (Fixed Serial Console & Logs) ---
 cat << EOF > /usr/local/bin/iot-lab-launch
 #!/bin/bash
 cd $BASE_DIR
@@ -381,13 +391,15 @@ for i in \$(seq 0 \$(( $COUNT - 1 ))); do
     IDX=\$(printf "%02d" \$((i+1)))
     echo "Booting VM \$IDX with MAC \${MACS[\$i]}..."
     
+    # Split Serial into chardev to enable simultaneous Socket access AND File Logging
     nice -n 19 qemu-system-aarch64 -name "iot-\$IDX" -machine virt -cpu cortex-a57 -smp 1 -m 256M \\
         -bios \$EFI -drive if=none,file="vms/iot-device-\${IDX}.qcow2",id=hd0,format=qcow2 \\
         -device virtio-blk-device,drive=hd0 -netdev tap,id=net0,ifname="tap-iot\${IDX}",script=no,downscript=no \\
         -device virtio-net-device,netdev=net0,mac=\${MACS[\$i]} -device virtio-rng-pci \\
         -display none -daemonize \\
-        -serial unix:logs/vm_\${IDX}.sock,server,nowait \\
-        -D logs/qemu_\${IDX}.log
+        -chardev socket,id=char0,path=logs/vm_\${IDX}.sock,server=on,wait=off,logfile=logs/vm_\${IDX}.log \\
+        -serial chardev:char0 \\
+        -D logs/qemu_debug_\${IDX}.log
 done
 EOF
 chmod +x /usr/local/bin/iot-lab-launch
