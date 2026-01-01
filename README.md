@@ -31,7 +31,7 @@ It spins up lightweight QEMU/Alpine VMs that mimic real-world devices (Medical, 
 1.  Clone the Repository:
 
 ``` sh    
-git clone <url>
+git clone https://github.com/Akuqt/iot-lab-gen.git
 ```
 
 2.  Make the script executable:
