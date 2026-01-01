@@ -23,21 +23,12 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-# 1. DETECT REAL USER
-if [ -n "$SUDO_USER" ]; then
-    REAL_USER=$SUDO_USER
-    REAL_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6)
-else
-    REAL_USER=$(whoami)
-    REAL_HOME=$HOME
-fi
-
 # Default Values
 SUBNET=""
 COUNT=0
 CERT_PATH=""
 FIREWALL_IP=""
-BASE_DIR="$REAL_HOME/iot-lab"
+BASE_DIR="$(pwd)"
 CONFIG_FILE="iot.json"
 
 # 2. ARGUMENT PARSING
