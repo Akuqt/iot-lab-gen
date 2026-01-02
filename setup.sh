@@ -36,24 +36,34 @@ HOST_ARCH=$(uname -m)
 echo "[*] Detected Host Architecture: $HOST_ARCH"
 
 if [ "$HOST_ARCH" == "x86_64" ]; then
-    # --- Intel/AMD Configuration ---
+    # --- Intel/AMD Configuration (Azure Standard / Laptop) ---
     QEMU_PKG="qemu-system-x86"
     EFI_PKG="ovmf"
     QEMU_BIN="qemu-system-x86_64"
     ALPINE_ARCH="x86_64"
     MACHINE_TYPE="q35"
     CPU_FALLBACK="max"
+    
+    # [CRITICAL X86 FIX] Use PCI Bus for Devices
+    VIRTIO_NET="virtio-net-pci"
+    VIRTIO_BLK="virtio-blk-pci"
+    
     # Search paths for x86 OVMF BIOS
     BIOS_CANDIDATES=("/usr/share/OVMF/OVMF_CODE.fd" "/usr/share/ovmf/OVMF.fd" "/usr/share/qemu/OVMF.fd")
 
 elif [ "$HOST_ARCH" == "aarch64" ]; then
-    # --- ARM64 Configuration ---
+    # --- ARM64 Configuration (AWS Graviton / Azure ARM) ---
     QEMU_PKG="qemu-system-arm"
     EFI_PKG="qemu-efi-aarch64"
     QEMU_BIN="qemu-system-aarch64"
     ALPINE_ARCH="aarch64"
     MACHINE_TYPE="virt"
     CPU_FALLBACK="cortex-a57"
+    
+    # [CRITICAL ARM LOGIC] Keep using MMIO Devices (Do not change)
+    VIRTIO_NET="virtio-net-device"
+    VIRTIO_BLK="virtio-blk-device"
+    
     # Search paths for ARM UEFI BIOS
     BIOS_CANDIDATES=("/usr/share/qemu-efi-aarch64/QEMU_EFI.fd" "/usr/share/AAVMF/AAVMF_CODE.fd")
 
@@ -486,7 +496,7 @@ exit 0
 EOF
 chmod +x /usr/local/bin/iot-lab-network
 
-# --- VM Launcher (Dynamic Arch) ---
+# --- VM Launcher (Dynamic Bus Type) ---
 cat << EOF > /usr/local/bin/iot-lab-launch
 #!/bin/bash
 cd $BASE_DIR
@@ -497,15 +507,14 @@ for i in \$(seq 0 \$(( $COUNT - 1 ))); do
     IDX=\$(printf "%02d" \$((i+1)))
     echo "Booting VM \$IDX with MAC \${MACS[\$i]}..."
     
-    # KVM/QEMU Command built dynamically
-    # QEMU Binary: $QEMU_BIN
-    # Machine Type: $MACHINE_TYPE
-    # KVM Args: $KVM_ARGS
+    # QEMU Command with Dynamic Architecture & Device Types
+    # -device \$VIRTIO_BLK (pci or device)
+    # -device \$VIRTIO_NET (pci or device)
     
     nice -n 19 $QEMU_BIN -name "iot-\$IDX" -machine $MACHINE_TYPE $KVM_ARGS -smp 1 -m 256M \\
         -bios \$EFI -drive if=none,file="vms/iot-device-\${IDX}.qcow2",id=hd0,format=qcow2 \\
-        -device virtio-blk-device,drive=hd0 -netdev tap,id=net0,ifname="tap-iot\${IDX}",script=no,downscript=no \\
-        -device virtio-net-device,netdev=net0,mac=\${MACS[\$i]} -device virtio-rng-pci \\
+        -device $VIRTIO_BLK,drive=hd0 -netdev tap,id=net0,ifname="tap-iot\${IDX}",script=no,downscript=no \\
+        -device $VIRTIO_NET,netdev=net0,mac=\${MACS[\$i]} -device virtio-rng-pci \\
         -display none -daemonize \\
         -chardev socket,id=char0,path=logs/vm_\${IDX}.sock,server=on,wait=off,logfile=logs/vm_\${IDX}.log \\
         -serial chardev:char0 \\
