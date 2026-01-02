@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# IoT Lab Setup
+# IoT Lab Setup (Universal Architecture Support)
 # Italo Alfaro - 2026
 #
 # SPDX-License-Identifier: MIT
@@ -230,20 +230,16 @@ def show_leases():
         print("No leases file found.")
         return
 
-    print(f"{'#':<3} {'EXPIRATION':<20} {'PERSONA':<25} {'IP ADDRESS':<16} {'MAC ADDRESS':<18} {'LIFETIME'}")
-    print("-" * 95)
+    # Header with nice spacing
+    print(f"{'#':<3} {'EXPIRATION':<20} {'PERSONA':<30} {'IP ADDRESS':<16} {'MAC ADDRESS':<18} {'LIFETIME'}")
+    print("-" * 100)
     
     count = 1
     with open(KEA_LEASE_FILE, 'r') as f:
-        # Skip header if present (Kea CSV usually has a header row in recent versions, or just raw data)
-        # We check line content to determine.
         for line in f:
             parts = line.strip().split(',')
             if len(parts) < 5 or "address" in parts[0]: 
-                continue # Header or empty
-            
-            # CSV Columns (memfile default): 
-            # 0:address, 1:hwaddr, 2:client_id, 3:valid_lifetime, 4:expire, ...
+                continue 
             
             ip = parts[0]
             mac = parts[1].lower()
@@ -261,7 +257,8 @@ def show_leases():
             except:
                 date_str = expire_ts
 
-            print(f"{count:<3} {date_str:<20} {name:<25} {ip:<16} {mac:<18} {valid_lifetime}s")
+            # Print row with same spacing as header
+            print(f"{count:<3} {date_str:<20} {name:<30} {ip:<16} {mac:<18} {valid_lifetime}s")
             count += 1
 
 if __name__ == "__main__": 
@@ -755,10 +752,15 @@ case \$ACTION in
     systemctl status iot-network iot-syslog iot-vms kea-dhcp4-server | grep -E "●|Active:"
     echo ""
     echo "[ RUNNING VMS ]"
-    pgrep -a qemu | cut -d' ' -f1-4,15-20
+    # Format: PID | Binary | Name | QCOW Path
+    ps -C qemu-system-x86_64,qemu-system-aarch64 -o pid,comm,args --no-headers | \
+    while read pid comm args; do 
+        name=\$(echo "\$args" | grep -oP "(?<=-name\s)\S+")
+        file=\$(echo "\$args" | grep -oP "(?<=file=)[^,]+")
+        echo "\$pid \$comm \$name \$file"
+    done
     echo ""
     echo "[ DHCP LEASES ]"
-    # Use the Python helper to format the lease file
     python3 \$BASE_DIR/src/lease_viewer.py
     echo "=========================================================="
     ;;
