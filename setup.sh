@@ -23,11 +23,9 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-echo ""
 echo "========================================"
 echo "      IoT Lab Deployment Started        "
 echo "========================================"
-echo ""
 
 # ==========================================
 # 1. ARCHITECTURE DETECTION & CONFIGURATION
@@ -60,7 +58,7 @@ elif [ "$HOST_ARCH" == "aarch64" ]; then
     MACHINE_TYPE="virt"
     CPU_FALLBACK="cortex-a57"
     
-    # [CRITICAL ARM LOGIC] Keep using MMIO Devices (Do not change)
+    # [CRITICAL ARM LOGIC] Keep using MMIO Devices
     VIRTIO_NET="virtio-net-device"
     VIRTIO_BLK="virtio-blk-device"
     
@@ -207,15 +205,70 @@ done
 PYTHON_MAP_STR="${PYTHON_MAP_STR%,}}"
 PYTHON_MAP_STR+="}"
 
-# 6. GENERATE PYTHON AGENTS
-echo ""
-echo "[4/8] Writing Agent Scripts..."
-
-# --- Syslog Processor ---
+# Fix: Sanitize map string to prevent SyntaxError
 if [[ "${PYTHON_MAP_STR: -3}" == "}}}" ]]; then
     PYTHON_MAP_STR="${PYTHON_MAP_STR%?}"
 fi
 
+# 6. GENERATE PYTHON AGENTS
+echo ""
+echo "[4/8] Writing Agent Scripts..."
+
+# --- Lease Viewer ---
+cat << EOF > src/lease_viewer.py
+#!/usr/bin/env python3
+import time, os
+from datetime import datetime
+
+KEA_LEASE_FILE = '/var/lib/kea/kea-leases4.csv'
+# Load map embedded from installation
+RAW_MAP = $PYTHON_MAP_STR
+PERSONA_MAP = {k.lower(): v for k, v in RAW_MAP.items()}
+
+def show_leases():
+    if not os.path.exists(KEA_LEASE_FILE):
+        print("No leases file found.")
+        return
+
+    print(f"{'#':<3} {'EXPIRATION':<20} {'PERSONA':<25} {'IP ADDRESS':<16} {'MAC ADDRESS':<18} {'LIFETIME'}")
+    print("-" * 95)
+    
+    count = 1
+    with open(KEA_LEASE_FILE, 'r') as f:
+        # Skip header if present (Kea CSV usually has a header row in recent versions, or just raw data)
+        # We check line content to determine.
+        for line in f:
+            parts = line.strip().split(',')
+            if len(parts) < 5 or "address" in parts[0]: 
+                continue # Header or empty
+            
+            # CSV Columns (memfile default): 
+            # 0:address, 1:hwaddr, 2:client_id, 3:valid_lifetime, 4:expire, ...
+            
+            ip = parts[0]
+            mac = parts[1].lower()
+            valid_lifetime = parts[3]
+            expire_ts = parts[4]
+            
+            # Lookup Name
+            name = "Unknown"
+            if mac in PERSONA_MAP:
+                name = PERSONA_MAP[mac].get('name', 'Unknown')
+                
+            # Format Date
+            try:
+                date_str = datetime.fromtimestamp(int(expire_ts)).strftime('%Y-%m-%d %H:%M:%S')
+            except:
+                date_str = expire_ts
+
+            print(f"{count:<3} {date_str:<20} {name:<25} {ip:<16} {mac:<18} {valid_lifetime}s")
+            count += 1
+
+if __name__ == "__main__": 
+    show_leases()
+EOF
+
+# --- Syslog Processor ---
 cat << EOF > src/dhcp_processor.py
 #!/usr/bin/env python3
 import time, os, socket, random, sys
@@ -705,7 +758,8 @@ case \$ACTION in
     pgrep -a qemu | cut -d' ' -f1-4,15-20
     echo ""
     echo "[ DHCP LEASES ]"
-    tail -n 5 /var/lib/kea/kea-leases4.csv
+    # Use the Python helper to format the lease file
+    python3 \$BASE_DIR/src/lease_viewer.py
     echo "=========================================================="
     ;;
   connect)
