@@ -749,19 +749,25 @@ case \$ACTION in
     echo "=========================================================="
     echo "                 IoT LAB STATUS                           "
     echo "=========================================================="
+    echo ""
+    echo "[ PROCESSES ]"
+    echo ""
     systemctl status iot-network iot-syslog iot-vms kea-dhcp4-server | grep -E "●|Active:"
     echo ""
     echo "[ RUNNING VMS ]"
+    echo ""
     # Format: PID | Binary | Name | QCOW Path
     ps -C qemu-system-x86_64,qemu-system-aarch64 -o pid,comm,args --no-headers | \
     while read pid comm args; do 
         name=\$(echo "\$args" | grep -oP "(?<=-name\s)\S+")
-        file=\$(echo "\$args" | grep -oP "(?<=file=)[^,]+")
+        file=\$(echo "\$args" | grep -oP "(?<=file=)[^,\s]+" | head -n 1)
         echo "\$pid \$comm \$name \$file"
     done
     echo ""
     echo "[ DHCP LEASES ]"
+    echo ""
     python3 \$BASE_DIR/src/lease_viewer.py
+    echo ""
     echo "=========================================================="
     ;;
   connect)
