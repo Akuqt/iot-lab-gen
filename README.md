@@ -15,7 +15,7 @@ It spins up lightweight QEMU/Alpine VMs that mimic real-world devices (Medical, 
 
 ## Prerequisites
 
-* OS: Ubuntu 20.04/22.04 LTS or Debian 11/12 (Script uses 'apt-get').
+* OS: Ubuntu 20.04 or higher.
 * Hardware: CPU with Virtualization support.
 * Privileges: Root access (via 'sudo').
 * Firewall: Palo Alto Firewall with a valid IoT Subscription.
@@ -24,7 +24,7 @@ It spins up lightweight QEMU/Alpine VMs that mimic real-world devices (Medical, 
 
 ![Infra](docs/diag.svg)
 
-*Note: Tested on Ubuntu 22.04 running inside an AWS EC2 instance (c7g.xlarge) with 3 Qemu VMs.*
+*Note: Tested on Ubuntu 22.04 running inside an Azure instance (Standard D8s v3 - x86_64) with 20 Qemu VMs.*
 
 ## Installation
 
@@ -37,8 +37,7 @@ git clone https://github.com/Akuqt/iot-lab-gen.git
 2.  Make the script executable:
 
 ``` sh   
-cd iot-lab-gen
-chmod +x setup.sh
+cd iot-lab-gen && chmod +x setup.sh
 ```
 
 ## Usage
@@ -119,6 +118,7 @@ After installation, the environment is located at '~/iot-lab-gen/':
 
 ``` sh
   ~/iot-lab-gen/
+  |-- docs/                     # Repo doc related files
   |-- certs/                    # Stored Root CA certificates
   |-- src/                      # Source code for agents
   |   |-- dhcp_processor.py     # Syslog message generator
@@ -133,7 +133,7 @@ After installation, the environment is located at '~/iot-lab-gen/':
 Once deployed, a helper script is generated at '/usr/local/bin/iot_lab'. Use this to control the environment.
 
 ```sh
-Usage: iot_lab <command> [option]
+Usage: sudo iot_lab <command> [option]
 
 Commands:
 
@@ -153,7 +153,7 @@ Commands:
 
 Before running this script, ensure your host machine is correctly sized. Each simulated IoT device requires **1 vCPU** and **256MB of RAM** if **KVM** (Hardware Acceleration) is enabled. If **KVM** is disabled, **QEMU** is forced to use Software Emulation (**TCG**), creating a massive memory overhead.
 
-Creating more devices than your host can handle may lead to system instability, freezing, or OOM (Out of Memory) kills.
+Creating more devices than your host can handle may lead to system instability, freezing, or OOM (Out of Memory) kills so be careful.
 
 ### Infrastructure
 
