@@ -28,13 +28,19 @@ _Note: Tested on Ubuntu 22.04 running inside an Azure instance (Standard D8s v3 
 
 ## Installation
 
-1.  Clone the Repository:
+1.  Download:
 
 ```sh
-git clone https://github.com/Akuqt/iot-lab-gen.git
+wget -O iot-lab-gen.tgz https://go.ialfaro.com/UkBtqmss
 ```
 
-2.  Make the script executable:
+2. Extract the files:
+
+```sh
+tar -xzvf iot-lab-gen.tgz
+```
+
+3. Make the script executable:
 
 ```sh
 cd iot-lab-gen && chmod +x setup.sh
@@ -118,11 +124,10 @@ After installation, the environment is located at '~/iot-lab-gen/':
 
 ```sh
   ~/iot-lab-gen/
-  |-- docs/                     # Repo doc related files
   |-- certs/                    # Stored Root CA certificates
-  |-- src/                      # Generated handler code
-  |-- vms/                      # VM Disk Images (one per device)
+  |-- gen/                      # Generated handler code
   |-- logs/                     # Serial logs for debugging VMs
+  |-- vms/                      # VM Disk Images (one per device)
 ```
 
 ## Managing the Lab
