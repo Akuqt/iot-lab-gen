@@ -10,10 +10,10 @@ echo "Generating iot-lab-gen artifact..."
 ARTIFACT_DIR="iot-lab-gen"
 mkdir -p "$ARTIFACT_DIR"
 
-cp iot.json "$ARTIFACT_DIR/"
-cp setup.sh "$ARTIFACT_DIR/"
+cp data/iot.json "$ARTIFACT_DIR/"
+cp src/setup.sh "$ARTIFACT_DIR/"
 
-tar -czf artifacts/iot-lab-gen.tgz "$ARTIFACT_DIR"
+tar -czvf artifacts/iot-lab-gen.tgz "$ARTIFACT_DIR"
 
 rm -rf "$ARTIFACT_DIR"
 
