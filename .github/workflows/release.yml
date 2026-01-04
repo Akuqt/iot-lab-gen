@@ -1,0 +1,58 @@
+name: Release
+
+on:
+    workflow_dispatch:
+        inputs:
+            release_version:
+                description: "Release Version"
+                required: true
+                type: string
+
+concurrency:
+    group: ci-${{ github.head_ref }}-${{github.action}}
+    cancel-in-progress: true
+
+jobs:
+    release:
+        runs-on: ${{ matrix.os }}
+        env:
+            SCRIPTS: .github/workflows/scripts
+            RELEASE_VERSION: ${{ github.event.inputs.release_version || '' }}
+
+        strategy:
+            matrix:
+                os: [ubuntu-latest]
+
+        name: Generate Release
+
+        steps:
+            - name: Setup Repository
+              uses: actions/checkout@v4
+              with:
+                  ref: main
+                  fetch-depth: 0
+            - name: Setup Scripts
+              run: chmod +x $SCRIPTS/*.sh
+            - name: Generate Release Notes
+              run: |
+                  ./$SCRIPTS/generate_release.sh >> $GITHUB_OUTPUT
+              id: release_notes
+            - name: Generate Artifacts
+              run: |
+                  ./$SCRIPTS/generate_artifacts.sh
+            - name: Create tag
+              uses: actions/github-script@v7
+              with:
+                  script: |
+                      github.rest.git.createRef({
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        ref: 'refs/tags/${{ steps.release_notes.outputs.TAG_NAME }}',
+                        sha: context.sha
+                      })
+            - name: Create Release
+              uses: ncipollo/release-action@v1
+              with:
+                  artifacts: "./artifacts/iot-lab-gen.tgz"
+                  tag: ${{ steps.release_notes.outputs.TAG_NAME }}
+                  bodyFile: ./release_notes/notes.md
