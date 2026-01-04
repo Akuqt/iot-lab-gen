@@ -221,9 +221,46 @@ import time, os
 from datetime import datetime
 
 KEA_LEASE_FILE = '/var/lib/kea/kea-leases4.csv'
+# Number of recent leases you want to show
+LINES_TO_SHOW = $COUNT
+
 # Load map embedded from installation
 RAW_MAP = $PYTHON_MAP_STR
 PERSONA_MAP = {k.lower(): v for k, v in RAW_MAP.items()}
+
+def get_last_lines_efficiently(file_path, n):
+    """Jumps to the end of the file and reads backwards to find n lines."""
+    results = []
+    buffer_size = 4096  # 4KB chunks
+
+    if not os.path.exists(file_path):
+        return []
+
+    with open(file_path, 'rb') as f:
+        f.seek(0, os.SEEK_END)
+        file_size = f.tell()
+        pointer = file_size
+
+        while len(results) <= n and pointer > 0:
+            # Move back by buffer_size but don't go past start of file
+            step = min(pointer, buffer_size)
+            pointer -= step
+            f.seek(pointer)
+
+            # Read chunk and combine with previous results
+            chunk = f.read(step).decode('utf-8', errors='ignore')
+            # Prepend the new chunk data
+            current_lines = chunk.splitlines()
+
+            # If we were in the middle of a line, handle the join
+            if results and not chunk.endswith('\n'):
+                current_lines[-1] = current_lines[-1] + results[0]
+                results = current_lines + results[1:]
+            else:
+                results = current_lines + results
+
+        # Return only the requested number of lines from the tail
+        return results[-n:]
 
 def show_leases():
     if not os.path.exists(KEA_LEASE_FILE):
@@ -232,34 +269,35 @@ def show_leases():
 
     # Header with nice spacing
     print(f"{'#':<3} {'EXPIRATION':<20} {'PERSONA':<30} {'IP ADDRESS':<16} {'MAC ADDRESS':<18} {'LIFETIME'}")
-    print("-" * 100)
+    print("-" * 105)
+
+    # Use the new efficient logic
+    lines = get_last_lines_efficiently(KEA_LEASE_FILE, LINES_TO_SHOW)
 
     count = 1
-    with open(KEA_LEASE_FILE, 'r') as f:
-        for line in f:
-            parts = line.strip().split(',')
-            if len(parts) < 5 or "address" in parts[0]:
-                continue
+    for line in lines:
+        parts = line.strip().split(',')
+        # Skip headers or empty lines
+        if len(parts) < 5 or "address" in parts[0] or not parts[0]:
+            continue
 
-            ip = parts[0]
-            mac = parts[1].lower()
-            valid_lifetime = parts[3]
-            expire_ts = parts[4]
+        ip = parts[0]
+        mac = parts[1].lower()
+        valid_lifetime = parts[3]
+        expire_ts = parts[4]
 
-            # Lookup Name
-            name = "Unknown"
-            if mac in PERSONA_MAP:
-                name = PERSONA_MAP[mac].get('name', 'Unknown')
+        # Lookup Name
+        name = PERSONA_MAP.get(mac, {}).get('name', 'Unknown')
 
-            # Format Date
-            try:
-                date_str = datetime.fromtimestamp(int(expire_ts)).strftime('%Y-%m-%d %H:%M:%S')
-            except:
-                date_str = expire_ts
+        # Format Date
+        try:
+            date_str = datetime.fromtimestamp(int(expire_ts)).strftime('%Y-%m-%d %H:%M:%S')
+        except (ValueError, TypeError):
+            date_str = expire_ts
 
-            # Print row with same spacing as header
-            print(f"{count:<3} {date_str:<20} {name:<30} {ip:<16} {mac:<18} {valid_lifetime}s")
-            count += 1
+        # Print row
+        print(f"{count:<3} {date_str:<20} {name:<30} {ip:<16} {mac:<18} {valid_lifetime}s")
+        count += 1
 
 if __name__ == "__main__":
     show_leases()
