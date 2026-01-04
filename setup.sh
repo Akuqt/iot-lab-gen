@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# IoT Lab Setup (Universal Architecture Support)
+# IoT Lab Setup
 # Italo Alfaro - 2026
 #
 # SPDX-License-Identifier: MIT
@@ -48,8 +48,8 @@ if [ "$HOST_ARCH" == "x86_64" ]; then
     
     # Search paths for x86 OVMF BIOS
     BIOS_CANDIDATES=("/usr/share/OVMF/OVMF_CODE.fd" "/usr/share/ovmf/OVMF.fd" "/usr/share/qemu/OVMF.fd")
-
-elif [ "$HOST_ARCH" == "aarch64" ]; then
+    
+    elif [ "$HOST_ARCH" == "aarch64" ]; then
     # --- ARM64 Configuration (AWS Graviton / Azure ARM) ---
     QEMU_PKG="qemu-system-arm"
     EFI_PKG="qemu-efi-aarch64"
@@ -64,7 +64,7 @@ elif [ "$HOST_ARCH" == "aarch64" ]; then
     
     # Search paths for ARM UEFI BIOS
     BIOS_CANDIDATES=("/usr/share/qemu-efi-aarch64/QEMU_EFI.fd" "/usr/share/AAVMF/AAVMF_CODE.fd")
-
+    
 else
     echo "[!] Error: Unsupported Architecture $HOST_ARCH"
     exit 1
@@ -89,14 +89,14 @@ CONFIG_FILE="iot.json"
 
 # 2. ARGUMENT PARSING
 while getopts "s:n:f:c:j:" opt; do
-  case $opt in
-    s) SUBNET="$OPTARG" ;;
-    n) COUNT="$OPTARG" ;;
-    f) FIREWALL_IP="$OPTARG" ;;
-    c) CERT_PATH="$OPTARG" ;;
-    j) CONFIG_FILE="$OPTARG" ;;
-    \?) echo "Invalid option -$OPTARG" >&2; exit 1 ;;
-  esac
+    case $opt in
+        s) SUBNET="$OPTARG" ;;
+        n) COUNT="$OPTARG" ;;
+        f) FIREWALL_IP="$OPTARG" ;;
+        c) CERT_PATH="$OPTARG" ;;
+        j) CONFIG_FILE="$OPTARG" ;;
+        \?) echo "Invalid option -$OPTARG" >&2; exit 1 ;;
+    esac
 done
 
 if [ -z "$SUBNET" ] || [ "$COUNT" -eq 0 ]; then
@@ -140,8 +140,8 @@ echo "[1/8] Installing Dependencies..."
 apt-get update
 # Install the dynamic packages based on architecture
 apt-get install -y "$QEMU_PKG" "$EFI_PKG" qemu-utils bridge-utils kea-dhcp4-server \
-    python3-pip libguestfs-tools python3-scapy net-tools virtinst \
-    tmux jq socat
+python3-pip libguestfs-tools python3-scapy net-tools virtinst \
+tmux jq socat
 
 if [ -z "$BIOS_PATH" ]; then
     # Double check BIOS after install
@@ -189,14 +189,14 @@ for i in $(seq 0 $((COUNT-1))); do
     NAME=$(echo "$RAW_JSON" | jq -r '.name')
     VCI=$(echo "$RAW_JSON" | jq -r '.vci')
     JSON_MAC=$(echo "$RAW_JSON" | jq -r '.mac')
-
+    
     if [ "$i" -lt "$JSON_LEN" ]; then
         MAC="$JSON_MAC"
     else
         MAC=$(printf "52:54:00:%02x:%02x:%02x" $((RANDOM%256)) $((RANDOM%256)) $((RANDOM%256)))
         NAME="${NAME}_${i}"
     fi
-
+    
     FINAL_MACS+=("$MAC")
     FINAL_NAMES+=("$NAME")
     PYTHON_MAP_STR+="\"$MAC\": {\"name\": \"$NAME\", \"vci\": \"$VCI\"},"
@@ -233,24 +233,24 @@ def show_leases():
     # Header with nice spacing
     print(f"{'#':<3} {'EXPIRATION':<20} {'PERSONA':<30} {'IP ADDRESS':<16} {'MAC ADDRESS':<18} {'LIFETIME'}")
     print("-" * 100)
-    
+
     count = 1
     with open(KEA_LEASE_FILE, 'r') as f:
         for line in f:
             parts = line.strip().split(',')
-            if len(parts) < 5 or "address" in parts[0]: 
-                continue 
-            
+            if len(parts) < 5 or "address" in parts[0]:
+                continue
+
             ip = parts[0]
             mac = parts[1].lower()
             valid_lifetime = parts[3]
             expire_ts = parts[4]
-            
+
             # Lookup Name
             name = "Unknown"
             if mac in PERSONA_MAP:
                 name = PERSONA_MAP[mac].get('name', 'Unknown')
-                
+
             # Format Date
             try:
                 date_str = datetime.fromtimestamp(int(expire_ts)).strftime('%Y-%m-%d %H:%M:%S')
@@ -261,7 +261,7 @@ def show_leases():
             print(f"{count:<3} {date_str:<20} {name:<30} {ip:<16} {mac:<18} {valid_lifetime}s")
             count += 1
 
-if __name__ == "__main__": 
+if __name__ == "__main__":
     show_leases()
 EOF
 
@@ -272,7 +272,7 @@ import time, os, socket, random, sys
 from datetime import datetime
 
 KEA_LEASE_FILE = '/var/lib/kea/kea-leases4.csv'
-FW_SYSLOG_HOST = os.getenv('FW_SYSLOG_HOST', '$GATEWAY_IP') 
+FW_SYSLOG_HOST = os.getenv('FW_SYSLOG_HOST', '$GATEWAY_IP')
 FW_SYSLOG_PORT = 10514
 HOSTNAME = "ib-appliance-01.lab.local"
 LOCAL_LOG = "logs/iot_traffic.log"
@@ -287,15 +287,15 @@ def send_syslog(ip, mac, data):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     ts = datetime.now().strftime('%b %d %H:%M:%S')
     pid = random.randint(1000, 9999)
-    
+
     p_name = data.get('name', 'Unknown')
     p_vci = data.get('vci', 'Unknown')
-    
+
     msg = f"dhcpd[{pid}]: DHCPACK on {ip} to {mac} ({p_name}) via eth1 relay option-60:\"{p_vci}\" option-61:\"{mac}\""
     pkt = f"<134>{ts} {HOSTNAME} {msg}"
-    
+
     # 1. Send to Firewall
-    try: 
+    try:
         sock.sendto(pkt.encode(), (FW_SYSLOG_HOST, FW_SYSLOG_PORT))
         print(f"[+] Sent: {msg}")
         sys.stdout.flush()
@@ -311,31 +311,31 @@ def send_syslog(ip, mac, data):
 def monitor():
     print(f"[*] Monitoring Leases file: {KEA_LEASE_FILE}")
     print(f"[*] Target Syslog: {FW_SYSLOG_HOST}:{FW_SYSLOG_PORT}")
-    
-    if not os.path.exists(KEA_LEASE_FILE): 
+
+    if not os.path.exists(KEA_LEASE_FILE):
         open(KEA_LEASE_FILE, 'a').close()
-        
+
     f = open(KEA_LEASE_FILE, 'r')
-    f.seek(0, 2) 
-    
+    f.seek(0, 2)
+
     while True:
         line = f.readline()
-        if not line: 
+        if not line:
             time.sleep(0.5)
             continue
-            
+
         try:
             parts = line.strip().split(',')
             if len(parts) > 2:
                 ip = parts[0]
                 mac = parts[1].lower()
-                
-                if mac in PERSONA_MAP: 
+
+                if mac in PERSONA_MAP:
                     send_syslog(ip, mac, PERSONA_MAP[mac])
         except Exception as e:
             print(f"[-] Parse Error: {e}")
 
-if __name__ == "__main__": 
+if __name__ == "__main__":
     monitor()
 EOF
 
@@ -380,7 +380,7 @@ def send_tcp(ip, port, payload):
 def run_traffic():
     protos = CONFIG.get('protocols', [])
     ua = CONFIG.get('user_agent', 'Python-IoT-Agent')
-    
+
     while True:
         try:
             if "DNS" in protos:
@@ -411,7 +411,7 @@ def run_traffic():
                 t_host = random.choice(CONFIG['targets'].get('HTTP', []))
                 try: requests.get(f"http://{t_host}", headers={'User-Agent': ua}, timeout=2)
                 except: pass
-            
+
             if "HTTPS" in protos:
                 t_host = random.choice(CONFIG['targets'].get('HTTPS', []))
                 try: requests.get(f"https://{t_host}", headers={'User-Agent': ua}, timeout=2, verify=False)
@@ -435,8 +435,8 @@ def run_traffic():
                      send_udp(t_ip, 9999, b'ZIGBEE_ENCAP_DATA_FRAME')
 
         except Exception as e:
-            pass 
-            
+            pass
+
         time.sleep(CONFIG.get('cadence', 10) + random.uniform(0.5, 3.0))
 
 if __name__ == "__main__":
@@ -476,7 +476,7 @@ if [ -z "$FILENAME" ]; then
     exit 1
 fi
 
-if [ ! -f "vms/alpine-base.qcow2" ]; then 
+if [ ! -f "vms/alpine-base.qcow2" ]; then
     echo "[*] Downloading Alpine Base Image ($FILENAME) to ./vms/..."
     wget -O "vms/alpine-base.qcow2" "${SEARCH_URL}${FILENAME}"
 fi
@@ -494,20 +494,20 @@ for i in $(seq 0 $((COUNT-1))); do
     TEMPLATE_IDX=$(( i % JSON_LEN ))
     
     jq ".[$TEMPLATE_IDX]" "$CONFIG_FILE" > persona_temp.json
-
+    
     echo "[*] Customizing VM ${IDX}: $CURr_NAME..."
     rm -f "$IMG_NAME"
     qemu-img create -f qcow2 -b "alpine-base.qcow2" -F qcow2 "$IMG_NAME" 1G
     
     virt-customize -a "$IMG_NAME" --hostname "$CURr_NAME" --root-password password:$ROOT_PASS \
-        --run-command "mkdir -p /etc/cloud && touch /etc/cloud/cloud-init.disabled" \
-        --upload src/vm_deps.sh:/etc/local.d/vm_deps.start --chmod 0755:/etc/local.d/vm_deps.start \
-        --upload src/vm_agent.py:/usr/local/bin/vm_agent.py --chmod 0755:/usr/local/bin/vm_agent.py \
-        --upload persona_temp.json:/etc/persona_profile.json $CERT_CMD \
-        --run-command "rc-update add local default" \
-        --run-command "mkdir -p /etc/network/interfaces.d" \
-        --run-command "echo 'include /etc/network/interfaces.d/*.conf' >> /etc/network/interfaces" \
-        --write /etc/network/interfaces.d/eth0:"auto eth0\niface eth0 inet dhcp\n"
+    --run-command "mkdir -p /etc/cloud && touch /etc/cloud/cloud-init.disabled" \
+    --upload src/vm_deps.sh:/etc/local.d/vm_deps.start --chmod 0755:/etc/local.d/vm_deps.start \
+    --upload src/vm_agent.py:/usr/local/bin/vm_agent.py --chmod 0755:/usr/local/bin/vm_agent.py \
+    --upload persona_temp.json:/etc/persona_profile.json $CERT_CMD \
+    --run-command "rc-update add local default" \
+    --run-command "mkdir -p /etc/network/interfaces.d" \
+    --run-command "echo 'include /etc/network/interfaces.d/*.conf' >> /etc/network/interfaces" \
+    --write /etc/network/interfaces.d/eth0:"auto eth0\niface eth0 inet dhcp\n"
     
     rm persona_temp.json
 done
@@ -530,7 +530,7 @@ if ! ip link show br-iot >/dev/null 2>&1; then
     ip addr add $GATEWAY_IP/24 dev br-iot
 fi
 
-# Force UP state 
+# Force UP state
 ip link set br-iot up
 sleep 5
 
@@ -556,11 +556,11 @@ MACS=($MAC_LIST_STR)
 for i in \$(seq 0 \$(( $COUNT - 1 ))); do
     IDX=\$(printf "%02d" \$((i+1)))
     echo "Booting VM \$IDX with MAC \${MACS[\$i]}..."
-    
+
     # QEMU Command with Dynamic Architecture & Device Types
     # -device \$VIRTIO_BLK (pci or device)
     # -device \$VIRTIO_NET (pci or device)
-    
+
     nice -n 19 $QEMU_BIN -name "iot-\$IDX" -machine $MACHINE_TYPE $KVM_ARGS -smp 1 -m 256M \\
         -bios \$EFI -drive if=none,file="vms/iot-device-\${IDX}.qcow2",id=hd0,format=qcow2 \\
         -device $VIRTIO_BLK,drive=hd0 -netdev tap,id=net0,ifname="tap-iot\${IDX}",script=no,downscript=no \\
@@ -668,7 +668,7 @@ function wait_for_interface {
     INTERFACE="br-iot"
     MAX_ATTEMPTS=10
     ATTEMPT=1
-    
+
     echo -n "    ... checking for interface \$INTERFACE"
     while [ \$ATTEMPT -le \$MAX_ATTEMPTS ]; do
         STATE=\$(ip -o link show \$INTERFACE 2>/dev/null | grep -oE 'state (UP|UNKNOWN)')
@@ -677,7 +677,7 @@ function wait_for_interface {
             return 0
         fi
         echo -n "."
-        sleep 1
+        sleep 2
         ATTEMPT=\$((ATTEMPT + 1))
     done
     echo " [FAILED]"
@@ -690,7 +690,7 @@ function check_dhcp_port {
             return 0
         fi
         echo "    ... waiting for DHCP to listen (attempt \$i/10)"
-        sleep 1
+        sleep 2
     done
     return 1
 }
@@ -698,25 +698,25 @@ function check_dhcp_port {
 case \$ACTION in
   start)
     echo "[*] Starting services..."
-    
+
     # 1. Start Network Layer
     sudo systemctl start iot-network
-    
+
     # 2. Launch VMs
     echo "[*] Launching VMs..."
     sudo systemctl start iot-vms
-    
+
     # 3. Wait for infrastructure
     echo "[*] Waiting for network bridge..."
     sleep 10
     if ! wait_for_interface; then
         echo "[!] WARNING: Bridge interface check failed. Kea might fail."
     fi
-    
+
     # 4. Start DHCP
     echo "[*] Starting DHCP Server..."
     sudo systemctl restart kea-dhcp4-server
-    
+
     # 5. Validate DHCP
     if ! check_dhcp_port; then
         echo "[!] ERROR: DHCP failed to bind port 67. Restarting..."
@@ -758,7 +758,7 @@ case \$ACTION in
     echo ""
     # Format: PID | Binary | Name | QCOW Path
     ps -C qemu-system-x86_64,qemu-system-aarch64 -o pid,comm,args --no-headers | \
-    while read pid comm args; do 
+    while read pid comm args; do
         name=\$(echo "\$args" | grep -oP "(?<=-name\s)\S+")
         file=\$(echo "\$args" | grep -oP "(?<=file=)[^,\s]+" | head -n 1)
         echo "\$pid \$comm \$name \$file"
@@ -808,26 +808,26 @@ case \$ACTION in
     echo "[!] WARNING: This will DESTROY the lab environment."
     read -p "Are you sure? (y/N) " confirm
     if [[ \$confirm != [yY] ]]; then exit 0; fi
-    
+
     \$0 stop
     echo "[*] Removing Systemd Services..."
     sudo rm -f /etc/systemd/system/iot-*.service
     sudo systemctl daemon-reload
-    
+
     echo "[*] Cleaning Directories..."
     sudo rm -rf \$BASE_DIR /var/lib/kea /etc/kea/kea-dhcp4.conf
-    
+
     echo "[*] Cleaning Network..."
     sudo ip link delete br-iot 2>/dev/null
     for i in \$(seq -w 01 20); do sudo ip link delete tap-iot\$i 2>/dev/null; done
-    
+
     echo "[*] Uninstalling Command..."
     sudo rm -f /usr/local/bin/iot_lab
     echo "[+] System Cleaned."
     ;;
-  *) 
-    show_help 
-    exit 1 
+  *)
+    show_help
+    exit 1
     ;;
 esac
 EOF
