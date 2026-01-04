@@ -158,7 +158,7 @@ echo "[*] Using BIOS: $BIOS_PATH"
 # 4. PREPARE ENVIRONMENT
 echo ""
 echo "[2/8] Preparing Directory Structure..."
-mkdir -v -p "$BASE_DIR"/{certs,src,vms,logs}
+mkdir -v -p "$BASE_DIR"/{certs,gen,vms,logs}
 mkdir -v -p /var/lib/kea
 touch /var/lib/kea/kea-leases4.csv
 touch "$BASE_DIR/logs/iot_traffic.log"
@@ -215,7 +215,7 @@ echo ""
 echo "[4/8] Writing Agent Scripts..."
 
 # --- Lease Viewer ---
-cat << EOF > src/lease_viewer.py
+cat << EOF > gen/lease_viewer.py
 #!/usr/bin/env python3
 import time, os
 from datetime import datetime
@@ -304,7 +304,7 @@ if __name__ == "__main__":
 EOF
 
 # --- Syslog Processor ---
-cat << EOF > src/dhcp_processor.py
+cat << EOF > gen/dhcp_processor.py
 #!/usr/bin/env python3
 import time, os, socket, random, sys
 from datetime import datetime
@@ -378,7 +378,7 @@ if __name__ == "__main__":
 EOF
 
 # --- Traffic Generator ---
-cat << 'EOF' > src/vm_agent.py
+cat << 'EOF' > gen/vm_agent.py
 #!/usr/bin/env python3
 import socket, time, random, requests, json, sys, ssl
 CONFIG_PATH = "/etc/persona_profile.json"
@@ -483,7 +483,7 @@ if __name__ == "__main__":
 EOF
 
 # --- VM Deps Script ---
-cat << 'EOF' > src/vm_deps.sh
+cat << 'EOF' > gen/vm_deps.sh
 #!/bin/sh
 apk update && apk add python3 py3-pip py3-requests
 rm /etc/local.d/vm_deps.start
@@ -539,8 +539,8 @@ for i in $(seq 0 $((COUNT-1))); do
     
     virt-customize -a "$IMG_NAME" --hostname "$CURr_NAME" --root-password password:$ROOT_PASS \
     --run-command "mkdir -p /etc/cloud && touch /etc/cloud/cloud-init.disabled" \
-    --upload src/vm_deps.sh:/etc/local.d/vm_deps.start --chmod 0755:/etc/local.d/vm_deps.start \
-    --upload src/vm_agent.py:/usr/local/bin/vm_agent.py --chmod 0755:/usr/local/bin/vm_agent.py \
+    --upload gen/vm_deps.sh:/etc/local.d/vm_deps.start --chmod 0755:/etc/local.d/vm_deps.start \
+    --upload gen/vm_agent.py:/usr/local/bin/vm_agent.py --chmod 0755:/usr/local/bin/vm_agent.py \
     --upload persona_temp.json:/etc/persona_profile.json $CERT_CMD \
     --run-command "rc-update add local default" \
     --run-command "mkdir -p /etc/network/interfaces.d" \
@@ -657,7 +657,7 @@ After=network.target kea-dhcp4-server.service
 Type=simple
 User=root
 WorkingDirectory=$BASE_DIR
-ExecStart=/usr/bin/python3 $BASE_DIR/src/dhcp_processor.py
+ExecStart=/usr/bin/python3 $BASE_DIR/gen/dhcp_processor.py
 Restart=always
 Environment="FW_SYSLOG_HOST=$FIREWALL_IP"
 [Install]
@@ -804,7 +804,7 @@ case \$ACTION in
     echo ""
     echo "[ DHCP LEASES ]"
     echo ""
-    python3 \$BASE_DIR/src/lease_viewer.py
+    python3 \$BASE_DIR/gen/lease_viewer.py
     echo ""
     echo "=========================================================="
     ;;
