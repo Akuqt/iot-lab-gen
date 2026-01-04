@@ -1,6 +1,7 @@
 # Pull Request
 
 <!--
+Before submitting a PR, please read https://github.com/Akuqt/iot-lab-gen/blob/94dcaa5f2284b2539ca4ad0d82e739422bee9b2a/CODE_OF_CONDUCT.md
 
 1. Give the PR a descriptive title.
 
