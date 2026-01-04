@@ -1,42 +1,42 @@
 # IoT Lab Generator
 
-A lightweight "Infrastructure as Code" (IaC) tool to deploy realistic, virtualized IoT environments on a single Linux host. 
+A lightweight "Infrastructure as Code" (IaC) tool to deploy realistic, virtualized IoT environments on a single Linux host.
 
 It spins up lightweight QEMU/Alpine VMs that mimic real-world devices (Medical, Industrial, Home, Office), generating authentic network traffic (SIP, MQTT, CoAP, HTTPS, etc.) and identifying themselves via specific DHCP fingerprints (OUI, VCI/Option 60).
 
 ## Key Features
 
-* Dynamic host architecture detection (x86_64 or ARM).
-* Dynamic Device Personas: Define devices in a simple 'iot.json' file.
-* Realistic Traffic Generation: Agents generate live traffic for HTTP/S, DNS, SIP, MQTT, CoAP, SNMP, NTP, and Zigbee (tunneling).
-* DHCP Fingerprinting: Real Vendor Class Identifiers (VCI) and OUIs, perfect for testing Device Identification features in Palo Alto Firewalls.
-* Syslog Integration: Relays DHCP logs to the DHCP Server log ingestor in the Palo Alto Firewall for Device Mapping.
-* Lightweight: Uses Alpine Linux + QEMU (256MB RAM and 1 vCPU per device). 
+- Dynamic host architecture detection (x86_64 or ARM).
+- Dynamic Device Personas: Define devices in a simple 'iot.json' file.
+- Realistic Traffic Generation: Agents generate live traffic for HTTP/S, DNS, SIP, MQTT, CoAP, etc.
+- DHCP Fingerprinting: Real Vendor Class Identifiers (VCI) and OUIs, perfect for testing Device Identification features in Palo Alto Firewalls.
+- Syslog Integration: Relays DHCP logs to the DHCP Server log ingestor in the Palo Alto Firewall for Device Mapping.
+- Lightweight: Uses Alpine Linux + QEMU (256MB RAM and 1 vCPU per device).
 
 ## Prerequisites
 
-* OS: Ubuntu 20.04 or higher.
-* Hardware: CPU with Virtualization support.
-* Privileges: Root access (via 'sudo').
-* Firewall: Palo Alto Firewall with a valid IoT Subscription.
+- OS: Ubuntu 20.04 or higher.
+- Hardware: CPU with Virtualization support.
+- Privileges: Root access (via 'sudo').
+- Firewall: Palo Alto Firewall with a valid IoT Subscription.
 
-### Infrastructure 
+### Infrastructure
 
 ![Infra](docs/diag.svg)
 
-*Note: Tested on Ubuntu 22.04 running inside an Azure instance (Standard D8s v3 - x86_64) with 20 Qemu VMs.*
+_Note: Tested on Ubuntu 22.04 running inside an Azure instance (Standard D8s v3 - x86_64) with 20 Qemu VMs._
 
 ## Installation
 
 1.  Clone the Repository:
 
-``` sh    
+```sh
 git clone https://github.com/Akuqt/iot-lab-gen.git
 ```
 
 2.  Make the script executable:
 
-``` sh   
+```sh
 cd iot-lab-gen && chmod +x setup.sh
 ```
 
@@ -46,13 +46,13 @@ Run the setup script with 'sudo'. The script will automatically install dependen
 
 ### Syntax
 
-``` sh
+```sh
 sudo ./setup.sh -s <subnet> -n <count> -j <json_file> -f <firewall_ip> [-c <cert_path>]
 ```
 
 ### Arguments
 
-``` sh
+```sh
 -s : IoT Lab Subnet CIDR (e.g., 192.168.10.0/24)       [Required]
 -n : Total number of VMs to deploy.                    [Required]
 -j : Path to JSON device definition file.              [Required]
@@ -60,7 +60,7 @@ sudo ./setup.sh -s <subnet> -n <count> -j <json_file> -f <firewall_ip> [-c <cert
 -c : Path to Root CA cert (if decryption is enabled).  [Optional]
 ```
 
-*Note: If -n is higher than the number of devices in 'iot.json', the script will cycle through the list, reusing Personas but generating random unique MAC addresses for the extras.*
+_Note: If -n is higher than the number of devices in 'iot.json', the script will cycle through the list, reusing Personas but generating random unique MAC addresses for the extras._
 
 ## Device Definition
 
@@ -68,47 +68,47 @@ The lab is driven by the 'iot.json' file. This file defines the "Persona" of eve
 
 ### Example Object
 
-``` json
+```json
 {
-    "name": "Nest_Thermostat",
-    "mac": "18:B4:30:DD:EE:16",
-    "vci": "Nest/Thermostat/Gen3",
-    "ttl": 64,
-    "cadence": 60,
-    "protocols": ["HTTPS", "DNS"],
-    "user_agent": "Nest/5.6.3",
-    "targets": {
-        "DNS": ["home.nest.com", "time.google.com"],
-        "HTTPS": ["home.nest.com"]
-    }
+  "name": "Nest_Thermostat",
+  "mac": "18:B4:30:DD:EE:16",
+  "vci": "Nest/Thermostat/Gen3",
+  "ttl": 64,
+  "cadence": 60,
+  "protocols": ["HTTPS", "DNS"],
+  "user_agent": "Nest/5.6.3",
+  "targets": {
+    "DNS": ["home.nest.com", "time.google.com"],
+    "HTTPS": ["home.nest.com"]
+  }
 }
 ```
 
 ### Fields
 
-* mac: The specific MAC address (determines OUI).
-* vci: DHCP Option 60 string (Vendor Class Identifier).
-* cadence: How often (in seconds) the device generates traffic.
-* protocols: List of protocols to simulate.
-* targets: Dictionary of destinations (Hostnames or IPs) for each protocol.
+- mac: The specific MAC address (determines OUI).
+- vci: DHCP Option 60 string (Vendor Class Identifier).
+- cadence: How often (in seconds) the device generates traffic.
+- protocols: List of protocols to simulate.
+- targets: Dictionary of destinations (Hostnames or IPs) for each protocol.
 
 #### Protocols Available:
 
-* DNS
-* NTP
-* SIP
-* SNMP
-* HTTP
-* HTTPS
-* MQTT
-* CoAP
-* Zigbee
+- DNS
+- NTP
+- SIP
+- SNMP
+- HTTP
+- HTTPS
+- MQTT
+- CoAP
+- Zigbee
 
 ### Example Command
 
 Deploy 10 devices on 192.168.50.0/24 using the default iot.json:
 
-``` sh
+```sh
 sudo ./setup.sh -s 192.168.50.0/24 -n 10 -f 192.168.30.1 -j iot.json
 ```
 
@@ -116,14 +116,11 @@ sudo ./setup.sh -s 192.168.50.0/24 -n 10 -f 192.168.30.1 -j iot.json
 
 After installation, the environment is located at '~/iot-lab-gen/':
 
-``` sh
+```sh
   ~/iot-lab-gen/
   |-- docs/                     # Repo doc related files
   |-- certs/                    # Stored Root CA certificates
-  |-- src/                      # Source code for agents
-  |   |-- dhcp_processor.py     # Syslog message generator
-  |   |-- vm_agent.py           # VM Injected traffic script
-  |   |-- vm_deps.sh            # VM dependency installation script
+  |-- src/                      # Generated handler code
   |-- vms/                      # VM Disk Images (one per device)
   |-- logs/                     # Serial logs for debugging VMs
 ```
@@ -142,14 +139,14 @@ Commands:
   restart       Restart the environment.
   status        Show status of VMs, Network, and DHCP.
   connect <ID>  Connect to VM Console (e.g., iot_lab connect 01).
-  log <TARGET>  Tail logs. Target: 'syslog' or VM ID (e.g., 01)"
+  log <TARGET>  Tail logs. Target: 'syslog' or VM ID (e.g., 01).
   clean         DESTROY the lab (Delete data and configurations).
   help          Shows this help message.
 ```
 
 ## Notes
 
-### Stability 
+### Stability
 
 Before running this script, ensure your host machine is correctly sized. Each simulated IoT device requires **1 vCPU** and **256MB of RAM** if **KVM** (Hardware Acceleration) is enabled. If **KVM** is disabled, **QEMU** is forced to use Software Emulation (**TCG**), creating a massive memory overhead.
 
@@ -169,13 +166,10 @@ After a successful deployment, you will see the devices in the IoT portal:
 
 ![iot_portal](docs/iot_portal.png)
 
-*Note: Make sure that the firewall is running PAN-OS 11.1 or higher so IoT Security sends mappings for IoT devices regardless of their confidence score.*
+_Note: Make sure that the firewall is running PAN-OS 11.1 or higher so IoT Security sends mappings for IoT devices regardless of their confidence score._
 
 ## License
 
 MIT
 
-
-
-
-[syslog_listener]:https://docs.paloaltonetworks.com/iot/getting-started/firewall-deployment-for-device-visibility/use-dhcp-server-logs-to-increase-device-visibility
+[syslog_listener]: https://docs.paloaltonetworks.com/iot/getting-started/firewall-deployment-for-device-visibility/use-dhcp-server-logs-to-increase-device-visibility
