@@ -485,7 +485,10 @@ EOF
 # --- VM Deps Script ---
 cat << 'EOF' > gen/vm_deps.sh
 #!/bin/sh
-apk update && apk add python3 py3-pip py3-requests
+apk update && apk add python3 py3-pip py3-requests ca-certificates
+if [ -f /usr/local/share/ca-certificates/pan-root-ca.crt ]; then
+    update-ca-certificates
+fi
 rm /etc/local.d/vm_deps.start
 cat << 'SERVICE' > /etc/init.d/vm_agent
 #!/sbin/openrc-run
@@ -522,8 +525,8 @@ fi
 ROOT_PASS="password"
 CERT_CMD=""
 if [ -f "certs/pan-root-ca.crt" ]; then
-    # Fix: Use --mkdir (native flag) to avoid shell spacing issues
-    CERT_CMD="--mkdir /usr/local/share/ca-certificates --upload certs/pan-root-ca.crt:/usr/local/share/ca-certificates/pan-root-ca.crt --run-command update-ca-certificates"
+    # Fix: Create dir and upload ONLY. The update command happens on boot in vm_deps.sh
+    CERT_CMD="--mkdir /usr/local/share/ca-certificates --upload certs/pan-root-ca.crt:/usr/local/share/ca-certificates/pan-root-ca.crt"
 fi
 
 for i in $(seq 0 $((COUNT-1))); do
