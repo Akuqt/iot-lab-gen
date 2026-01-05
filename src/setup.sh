@@ -522,10 +522,8 @@ fi
 ROOT_PASS="password"
 CERT_CMD=""
 if [ -f "certs/pan-root-ca.crt" ]; then
-    # Fix: Create directory first, then upload, then update
-    CERT_CMD="--run-command 'mkdir -p /usr/local/share/ca-certificates' \
-              --upload certs/pan-root-ca.crt:/usr/local/share/ca-certificates/pan-root-ca.crt \
-              --run-command update-ca-certificates"
+    # Fix: Use --mkdir (native flag) to avoid shell spacing issues
+    CERT_CMD="--mkdir /usr/local/share/ca-certificates --upload certs/pan-root-ca.crt:/usr/local/share/ca-certificates/pan-root-ca.crt --run-command update-ca-certificates"
 fi
 
 for i in $(seq 0 $((COUNT-1))); do
