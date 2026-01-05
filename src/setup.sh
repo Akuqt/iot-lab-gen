@@ -49,7 +49,7 @@ if [ "$HOST_ARCH" == "x86_64" ]; then
     # Search paths for x86 OVMF BIOS
     BIOS_CANDIDATES=("/usr/share/OVMF/OVMF_CODE.fd" "/usr/share/ovmf/OVMF.fd" "/usr/share/qemu/OVMF.fd")
     
-    elif [ "$HOST_ARCH" == "aarch64" ]; then
+elif [ "$HOST_ARCH" == "aarch64" ]; then
     # --- ARM64 Configuration (AWS Graviton / Azure ARM) ---
     QEMU_PKG="qemu-system-arm"
     EFI_PKG="qemu-efi-aarch64"
@@ -138,10 +138,10 @@ fi
 echo ""
 echo "[1/8] Installing Dependencies..."
 apt-get update
-# Install the dynamic packages based on architecture
+# Install the dynamic packages based on architecture + dos2unix for sanitization
 apt-get install -y "$QEMU_PKG" "$EFI_PKG" qemu-utils bridge-utils kea-dhcp4-server \
 python3-pip libguestfs-tools python3-scapy net-tools virtinst \
-tmux jq socat
+tmux jq socat dos2unix
 
 if [ -z "$BIOS_PATH" ]; then
     # Double check BIOS after install
@@ -166,7 +166,15 @@ chown -R _kea:_kea /var/lib/kea
 chmod 755 /var/lib/kea
 
 if [ ! -z "$CERT_PATH" ] && [ -f "$CERT_PATH" ]; then
+    echo "[*] Processing and Sanitizing Certificate..."
     cp -v "$CERT_PATH" "$BASE_DIR/certs/pan-root-ca.crt"
+    
+    # --- SANITIZATION STEP ---
+    # 1. Remove Windows line endings (CRLF -> LF)
+    dos2unix "$BASE_DIR/certs/pan-root-ca.crt"
+    # 2. Ensure file ends with a newline (critical for concatenation)
+    sed -i -e '$a\' "$BASE_DIR/certs/pan-root-ca.crt"
+    echo "[*] Certificate sanitized."
 fi
 cd "$BASE_DIR"
 
@@ -482,13 +490,36 @@ if __name__ == "__main__":
     run_traffic()
 EOF
 
-# --- VM Deps Script ---
+# --- VM Deps Script (Robust Cert Install) ---
 cat << 'EOF' > gen/vm_deps.sh
 #!/bin/sh
 apk update && apk add python3 py3-pip py3-requests ca-certificates
-if [ -f /usr/local/share/ca-certificates/pan-root-ca.crt ]; then
+
+# CERTIFICATE FIX: Robust Installation
+CERT_SOURCE="/usr/local/share/ca-certificates/pan-root-ca.crt"
+CERT_BUNDLE="/etc/ssl/certs/ca-certificates.crt"
+
+if [ -f "$CERT_SOURCE" ]; then
+    echo "Processing Custom CA..."
+    
+    # Check if cert is already in the bundle (avoid duplicates)
+    # We grep for the second line of the cert (unique data)
+    SIGNATURE=$(sed '2q;d' "$CERT_SOURCE")
+    
+    if ! grep -Fq "$SIGNATURE" "$CERT_BUNDLE"; then
+        echo "Appending Custom CA to bundle..."
+        # 1. Add a safety newline to the bundle just in case
+        echo "" >> "$CERT_BUNDLE"
+        # 2. Append the custom cert
+        cat "$CERT_SOURCE" >> "$CERT_BUNDLE"
+        # 3. Add a trailing newline
+        echo "" >> "$CERT_BUNDLE"
+    fi
+    
+    # Re-hash (for tools that use the hash dir)
     update-ca-certificates
 fi
+
 rm /etc/local.d/vm_deps.start
 cat << 'SERVICE' > /etc/init.d/vm_agent
 #!/sbin/openrc-run
@@ -525,7 +556,7 @@ fi
 ROOT_PASS="password"
 CERT_CMD=""
 if [ -f "certs/pan-root-ca.crt" ]; then
-    # Fix: Create dir and upload ONLY. The update command happens on boot in vm_deps.sh
+    # Fix: Use --mkdir and upload ONLY. Installation happens in vm_deps.sh
     CERT_CMD="--mkdir /usr/local/share/ca-certificates --upload certs/pan-root-ca.crt:/usr/local/share/ca-certificates/pan-root-ca.crt"
 fi
 
@@ -696,14 +727,14 @@ ARG=\$2
 function show_help {
     echo "Usage: iot_lab <command> [option]"
     echo "Commands:"
-    echo "  start         Start the lab environment"
-    echo "  stop          Stop all VMs and services"
-    echo "  restart       Restart the environment"
-    echo "  status        Show status of VMs, Network, and DHCP"
-    echo "  connect <ID>  Connect to VM Console (e.g., iot_lab connect 01)"
-    echo "  log <TARGET>  Tail logs. Target: 'syslog' or VM ID (e.g., 01)"
-    echo "  clean         DESTROY the lab (Delete data and configurations)"
-    echo "  help          Shows this help message."
+    echo "  start          Start the lab environment"
+    echo "  stop           Stop all VMs and services"
+    echo "  restart        Restart the environment"
+    echo "  status         Show status of VMs, Network, and DHCP"
+    echo "  connect <ID>   Connect to VM Console (e.g., iot_lab connect 01)"
+    echo "  log <TARGET>   Tail logs. Target: 'syslog' or VM ID (e.g., 01)"
+    echo "  clean          DESTROY the lab (Delete data and configurations)"
+    echo "  help           Shows this help message."
 }
 
 function wait_for_interface {
@@ -789,7 +820,7 @@ case \$ACTION in
   restart) \$0 stop; sleep 2; \$0 start ;;
   status)
     echo "=========================================================="
-    echo "                 IoT LAB STATUS                           "
+    echo "                  IoT LAB STATUS                          "
     echo "=========================================================="
     echo ""
     echo "[ PROCESSES ]"
@@ -908,12 +939,12 @@ echo ""
 echo "   Usage: iot_lab <command> [option]"
 echo ""
 echo "   Commands:"
-echo "     start         Start the lab environment"
-echo "     stop          Stop all VMs and services"
-echo "     restart       Restart the environment"
-echo "     status        Show status of VMs, Network, and DHCP"
-echo "     connect <ID>  Connect to VM Console (e.g., iot_lab connect 01)"
-echo "     log <TARGET>  Tail logs. Target: 'syslog' or VM ID (e.g., 01)"
-echo "     clean         DESTROY the lab (Delete data and configurations)"
-echo "     help          Shows this help message."
+echo "     start          Start the lab environment"
+echo "     stop           Stop all VMs and services"
+echo "     restart        Restart the environment"
+echo "     status         Show status of VMs, Network, and DHCP"
+echo "     connect <ID>   Connect to VM Console (e.g., iot_lab connect 01)"
+echo "     log <TARGET>   Tail logs. Target: 'syslog' or VM ID (e.g., 01)"
+echo "     clean          DESTROY the lab (Delete data and configurations)"
+echo "     help           Shows this help message."
 echo ""
