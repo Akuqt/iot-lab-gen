@@ -490,33 +490,35 @@ if __name__ == "__main__":
     run_traffic()
 EOF
 
-# --- VM Deps Script (Robust Cert Install) ---
+# --- VM Deps Script ---
 cat << 'EOF' > gen/vm_deps.sh
 #!/bin/sh
 apk update && apk add python3 py3-pip py3-requests ca-certificates
 
-# CERTIFICATE FIX: Robust Installation
+# Set system name from profile.json
+if [ -f /etc/persona_profile.json ]; then
+    NEW_HOSTNAME=$(python3 -c "import json; print(json.load(open('/etc/persona_profile.json'))['name'])")
+    if [ ! -z "$NEW_HOSTNAME" ]; then
+        echo "Setting hostname to: $NEW_HOSTNAME"
+        hostname "$NEW_HOSTNAME"
+        echo "$NEW_HOSTNAME" > /etc/hostname
+        # Update hosts file to prevent "sudo: unable to resolve host" errors
+        echo "127.0.0.1    $NEW_HOSTNAME" >> /etc/hosts
+    fi
+fi
+
+# Certificate Installation
 CERT_SOURCE="/usr/local/share/ca-certificates/pan-root-ca.crt"
 CERT_BUNDLE="/etc/ssl/certs/ca-certificates.crt"
 
 if [ -f "$CERT_SOURCE" ]; then
     echo "Processing Custom CA..."
-    
-    # Check if cert is already in the bundle (avoid duplicates)
-    # We grep for the second line of the cert (unique data)
     SIGNATURE=$(sed '2q;d' "$CERT_SOURCE")
-    
     if ! grep -Fq "$SIGNATURE" "$CERT_BUNDLE"; then
-        echo "Appending Custom CA to bundle..."
-        # 1. Add a safety newline to the bundle just in case
         echo "" >> "$CERT_BUNDLE"
-        # 2. Append the custom cert
         cat "$CERT_SOURCE" >> "$CERT_BUNDLE"
-        # 3. Add a trailing newline
         echo "" >> "$CERT_BUNDLE"
     fi
-    
-    # Re-hash (for tools that use the hash dir)
     update-ca-certificates
 fi
 
@@ -619,7 +621,7 @@ exit 0
 EOF
 chmod +x /usr/local/bin/iot-lab-network
 
-# --- VM Launcher (Dynamic Bus Type) ---
+# --- VM Launcher ---
 cat << EOF > /usr/local/bin/iot-lab-launch
 #!/bin/bash
 cd $BASE_DIR
@@ -855,8 +857,11 @@ case \$ACTION in
         exit 1
     fi
     echo "[*] Connecting to IoT Device \$ID..."
-    echo "    (Press Ctrl+C to exit console)"
-    sudo socat - UNIX-CONNECT:\$SOCK
+    echo "    (Press 'Ctrl + ]' to exit console)"
+    
+    # FIX: Use raw mode to prevent garbage characters and control codes
+    # escape=0x1d maps the exit key to 'Ctrl + ]'
+    sudo socat -,raw,echo=0,escape=0x1d UNIX-CONNECT:\$SOCK
     ;;
   log)
     if [ -z "\$ARG" ]; then
